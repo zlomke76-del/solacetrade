@@ -12,6 +12,13 @@ const requiredPhotoSteps = ["front", "driverSide", "rear", "odometer", "vin"] as
 
 type RequiredPhotoStep = (typeof requiredPhotoSteps)[number];
 
+type UploadFile = {
+  name?: string;
+  type?: string;
+  size: number;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+};
+
 const photoAliases: Record<RequiredPhotoStep, string[]> = {
   front: ["front"],
   driverSide: ["driverSide", "side", "driver_side"],
@@ -20,7 +27,19 @@ const photoAliases: Record<RequiredPhotoStep, string[]> = {
   vin: ["vin", "vinPhoto", "vin_photo"],
 };
 
-function extensionFor(file: File) {
+function isUploadFile(value: FormDataEntryValue | null): value is UploadFile {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "size" in value &&
+    "arrayBuffer" in value &&
+    typeof (value as UploadFile).arrayBuffer === "function" &&
+    typeof (value as UploadFile).size === "number" &&
+    (value as UploadFile).size > 0
+  );
+}
+
+function extensionFor(file: UploadFile) {
   const fallback =
     file.type === "image/png"
       ? "png"
@@ -32,7 +51,8 @@ function extensionFor(file: File) {
   const match = source.match(/\.([a-zA-Z0-9]+)$/);
 
   return (
-    (match?.[1] || fallback).toLowerCase().replace(/[^a-z0-9]/g, "") || fallback
+    (match?.[1] || fallback).toLowerCase().replace(/[^a-z0-9]/g, "") ||
+    fallback
   );
 }
 
@@ -40,7 +60,7 @@ function findPhotoFile(formData: FormData, stepKey: RequiredPhotoStep) {
   for (const key of photoAliases[stepKey]) {
     const candidate = formData.get(key);
 
-    if (candidate instanceof File && candidate.size > 0) {
+    if (isUploadFile(candidate)) {
       return {
         stepKey,
         submittedKey: key,
@@ -66,9 +86,6 @@ export async function POST(
         ? "internal"
         : "customer";
 
-    // Evidence-only rule:
-    // VIN and mileage are never accepted from the customer at intake.
-    // They are derived later from the uploaded VIN and odometer images.
     const customerName = cleanText(formData.get("customerName"), 160);
     const customerContact = cleanText(formData.get("contact"), 180);
     const salesperson = cleanText(formData.get("salesperson"), 160);
@@ -82,7 +99,7 @@ export async function POST(
         ): entry is {
           stepKey: RequiredPhotoStep;
           submittedKey: string;
-          file: File;
+          file: UploadFile;
         } => Boolean(entry),
       );
 
