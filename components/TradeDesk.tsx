@@ -33,6 +33,14 @@ type SolaceValue = {
   conditionNotes: string[];
   missingItems: string[];
   dealerReviewNotes: string[];
+  detectedVin?: string | null;
+  detectedMileage?: string | number | null;
+  vin?: string | null;
+  mileage?: string | number | null;
+  vehicle?: {
+    vin?: string | null;
+    mileage?: string | number | null;
+  } | null;
 };
 
 const captureSteps: CaptureStep[] = [
@@ -94,6 +102,12 @@ function cleanMileage(value: string) {
   return Number(value.replace(/[^\d]/g, ""));
 }
 
+function displayMileage(value: string) {
+  const cleaned = cleanMileage(value);
+  if (!cleaned) return "";
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(cleaned);
+}
+
 function emptyPhotos(): PhotoMap {
   return Object.fromEntries(captureSteps.map((step) => [step.key, null]));
 }
@@ -111,7 +125,30 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
-export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = "your dealer", brandColor = "#b91c1c" }: TradeDeskProps) {
+function getValueVin(value: SolaceValue | null) {
+  return (
+    value?.detectedVin ||
+    value?.vin ||
+    value?.vehicle?.vin ||
+    ""
+  );
+}
+
+function getValueMileage(value: SolaceValue | null) {
+  const raw =
+    value?.detectedMileage ??
+    value?.mileage ??
+    value?.vehicle?.mileage ??
+    "";
+  return raw ? String(raw) : "";
+}
+
+export default function TradeDesk({
+  dealerSlug,
+  mode = "customer",
+  dealerName = "your dealer",
+  brandColor = "#b91c1c",
+}: TradeDeskProps) {
   const isInternal = mode === "internal";
   const red = brandColor || "#b91c1c";
 
@@ -130,6 +167,7 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
   const [submitting, setSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [showVehicleEdit, setShowVehicleEdit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
@@ -138,20 +176,35 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
   const mileageNumber = cleanMileage(mileage);
   const scanComplete = capturedCount === captureSteps.length;
   const showDetails = scanComplete;
+  const canRequestOffer = isInternal
+    ? scanComplete
+    : scanComplete && customerName.trim().length > 0;
 
   const missingItems = useMemo(() => {
     const missing: string[] = [];
     captureSteps.forEach((step) => {
       if (!photos[step.key]) missing.push(`${step.shortLabel} photo`);
     });
-    if (scanComplete && !vin.trim()) missing.push("VIN");
-    if (scanComplete && !mileageNumber) missing.push("mileage");
-    return missing;
-  }, [scanComplete, vin, mileageNumber, photos]);
 
-  const readyForValue = scanComplete && vin.trim().length > 0 && mileageNumber > 0;
+    if (!scanComplete) return missing;
+
+    if (isInternal) {
+      if (!vin.trim()) missing.push("VIN");
+      if (!mileageNumber) missing.push("mileage");
+    } else if (!customerName.trim()) {
+      missing.push("name");
+    }
+
+    return missing;
+  }, [isInternal, scanComplete, customerName, vin, mileageNumber, photos]);
+
   const nextMissingPhoto = captureSteps.find((step) => !photos[step.key]);
-  const nextMissing = scanComplete ? missingItems[0] : `${nextMissingPhoto?.shortLabel || "next"} photo`;
+  const nextMissing = scanComplete
+    ? missingItems[0]
+    : `${nextMissingPhoto?.shortLabel || "next"} photo`;
+
+  const detectedVin = vin.trim() || getValueVin(value);
+  const detectedMileage = mileage.trim() || getValueMileage(value);
 
   function openCameraOrFilePicker() {
     setStarted(true);
@@ -181,8 +234,18 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
     setErrorMessage("");
     setStatusMessage("");
 
-    if (!readyForValue) {
-      setErrorMessage(scanComplete ? `Next needed: ${nextMissing}.` : `Finish the five guided photos first. Next needed: ${nextMissing}.`);
+    if (!scanComplete) {
+      setErrorMessage(`Finish the five guided photos first. Next needed: ${nextMissing}.`);
+      return;
+    }
+
+    if (!isInternal && !customerName.trim()) {
+      setErrorMessage("Enter your name so Solace can prepare the offer file.");
+      return;
+    }
+
+    if (isInternal && (!vin.trim() || !mileageNumber)) {
+      setErrorMessage(`Next needed: ${nextMissing}.`);
       return;
     }
 
@@ -210,10 +273,12 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
       });
 
       const intakeJson = await intakeResponse.json();
-      if (!intakeResponse.ok) throw new Error(intakeJson.error || "Could not save vehicle scan.");
+      if (!intakeResponse.ok) {
+        throw new Error(intakeJson.error || "Could not save vehicle scan.");
+      }
 
       setIntakeId(intakeJson.intakeId);
-      setStatusMessage("Solace is producing the instant cash offer...");
+      setStatusMessage("Solace is reading the scan and producing the instant cash offer...");
 
       const valueResponse = await fetch(`/api/solacetrade/${dealerSlug}/value`, {
         method: "POST",
@@ -222,9 +287,18 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
       });
 
       const valueJson = await valueResponse.json();
-      if (!valueResponse.ok) throw new Error(valueJson.error || "Could not produce cash offer.");
+      if (!valueResponse.ok) {
+        throw new Error(valueJson.error || "Could not produce cash offer.");
+      }
 
-      setValue(valueJson.value);
+      const nextValue = valueJson.value as SolaceValue;
+      const nextVin = getValueVin(nextValue);
+      const nextMileage = getValueMileage(nextValue);
+
+      if (nextVin && !vin.trim()) setVin(nextVin.toUpperCase());
+      if (nextMileage && !mileage.trim()) setMileage(nextMileage);
+
+      setValue(nextValue);
       setStatusMessage("Instant cash offer ready.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
@@ -254,13 +328,19 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
           customerIntent,
           contact,
           customerName,
+          vin,
+          mileage,
         }),
       });
 
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Could not send vehicle file.");
 
-      setStatusMessage(json.emailed ? `Vehicle file sent to ${json.dealer.name}.` : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active.");
+      setStatusMessage(
+        json.emailed
+          ? `Vehicle file sent to ${json.dealer.name}.`
+          : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active."
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
@@ -283,6 +363,7 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
     setValue(null);
     setStatusMessage("");
     setErrorMessage("");
+    setShowVehicleEdit(false);
   }
 
   return (
@@ -328,20 +409,44 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
               textTransform: "uppercase",
             }}
           >
-            <span style={{ width: 7, height: 7, borderRadius: 999, background: isInternal ? "#38bdf8" : red }} />
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 999,
+                background: isInternal ? "#38bdf8" : red,
+              }}
+            />
             {isInternal ? "Manager Packet" : "Guided Vehicle Scan"}
           </div>
           <strong style={{ fontSize: 12, opacity: 0.86 }}>{capturedCount}/5 photos</strong>
         </div>
 
-        <h2 style={{ margin: "12px 0 6px", fontSize: "clamp(21px, 4vw, 30px)", lineHeight: 1.04, letterSpacing: "-0.045em" }}>
+        <h2
+          style={{
+            margin: "12px 0 6px",
+            fontSize: "clamp(21px, 4vw, 30px)",
+            lineHeight: 1.04,
+            letterSpacing: "-0.045em",
+          }}
+        >
           {started ? currentStep.label : "Capture the vehicle first."}
         </h2>
         <p style={{ margin: 0, color: "rgba(255,255,255,0.76)", fontSize: 14, lineHeight: 1.42 }}>
-          {started ? currentStep.coaching : "Five guided photos first. VIN and mileage appear after the image sequence is complete."}
+          {started
+            ? currentStep.coaching
+            : "Five guided photos first. Solace reads the VIN and mileage from the scan."}
         </p>
 
-        <div style={{ height: 7, marginTop: 14, borderRadius: 999, background: "rgba(255,255,255,0.14)", overflow: "hidden" }}>
+        <div
+          style={{
+            height: 7,
+            marginTop: 14,
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.14)",
+            overflow: "hidden",
+          }}
+        >
           <div
             style={{
               width: `${photoProgress}%`,
@@ -375,11 +480,49 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
           <img
             src={currentStep.image}
             alt={`${currentStep.label} guide`}
-            style={{ width: "100%", height: 236, display: "block", objectFit: "cover", filter: "brightness(0.66) saturate(1.05)" }}
+            style={{
+              width: "100%",
+              height: 236,
+              display: "block",
+              objectFit: "cover",
+              filter: "brightness(0.66) saturate(1.05)",
+            }}
           />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(2,6,23,0.48), rgba(2,6,23,0.04) 44%, rgba(2,6,23,0.72))" }} />
-          <div style={{ position: "absolute", inset: "14% 10% 18%", border: "2px dashed rgba(255,255,255,0.50)", borderRadius: 22 }} />
-          <div style={{ position: "absolute", top: "50%", left: "50%", width: 52, height: 52, marginLeft: -26, marginTop: -26, borderRadius: "50%", background: "rgba(255,255,255,0.94)", display: "grid", placeItems: "center", color: dark, fontSize: 29, fontWeight: 900, boxShadow: "0 18px 40px rgba(0,0,0,0.34)" }}>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(180deg, rgba(2,6,23,0.48), rgba(2,6,23,0.04) 44%, rgba(2,6,23,0.72))",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: "14% 10% 18%",
+              border: "2px dashed rgba(255,255,255,0.50)",
+              borderRadius: 22,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              width: 52,
+              height: 52,
+              marginLeft: -26,
+              marginTop: -26,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.94)",
+              display: "grid",
+              placeItems: "center",
+              color: dark,
+              fontSize: 29,
+              fontWeight: 900,
+              boxShadow: "0 18px 40px rgba(0,0,0,0.34)",
+            }}
+          >
             +
           </div>
           <div style={{ position: "absolute", left: 15, right: 15, bottom: 13, color: "white" }}>
@@ -390,7 +533,14 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
           </div>
         </button>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 7, marginTop: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: 7,
+            marginTop: 10,
+          }}
+        >
           {captureSteps.map((step, index) => {
             const active = stepIndex === index;
             const done = Boolean(photos[step.key]);
@@ -413,7 +563,8 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
                   cursor: "pointer",
                 }}
               >
-                {done ? "✓ " : ""}{step.shortLabel}
+                {done ? "✓ " : ""}
+                {step.shortLabel}
               </button>
             );
           })}
@@ -422,33 +573,177 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
 
       <div style={{ padding: "0 14px 16px" }}>
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 21, padding: 14, background: "#f8fafc" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", marginBottom: showDetails ? 12 : 0 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "flex-start",
+              marginBottom: showDetails ? 12 : 0,
+            }}
+          >
             <div>
-              <h3 style={{ margin: 0, fontSize: 18 }}>{showDetails ? "Add VIN and mileage" : "Finish the photo sequence"}</h3>
+              <h3 style={{ margin: 0, fontSize: 18 }}>
+                {showDetails
+                  ? isInternal
+                    ? "Add vehicle details"
+                    : "Tell us where to send the offer"
+                  : "Finish the photo sequence"}
+              </h3>
               <p style={{ margin: "4px 0 0", color: muted, fontSize: 13, lineHeight: 1.35 }}>
-                {showDetails ? "Solace produces the instant cash offer after these details." : nextMissing ? `Next needed: ${nextMissing}.` : "Keep going."}
+                {showDetails
+                  ? isInternal
+                    ? "Internal mode can enter VIN and mileage manually."
+                    : "Solace reads VIN and mileage from the scan. You only need to enter your name."
+                  : nextMissing
+                    ? `Next needed: ${nextMissing}.`
+                    : "Keep going."}
               </p>
             </div>
-            <div style={{ minWidth: 68, textAlign: "right", color: readyForValue ? "#047857" : red, fontWeight: 900, fontSize: 13 }}>
-              {readyForValue ? "Ready" : showDetails ? `${missingItems.length} left` : `${captureSteps.length - capturedCount} left`}
+            <div
+              style={{
+                minWidth: 68,
+                textAlign: "right",
+                color: canRequestOffer ? "#047857" : red,
+                fontWeight: 900,
+                fontSize: 13,
+              }}
+            >
+              {canRequestOffer ? "Ready" : showDetails ? `${missingItems.length} left` : `${captureSteps.length - capturedCount} left`}
             </div>
           </div>
 
           {isInternal && showDetails && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9, marginBottom: 9 }}>
-              <input placeholder="Salesperson" value={salesperson} onChange={(event) => setSalesperson(event.target.value)} style={inputStyle()} />
-              <input placeholder="Customer" value={customerName} onChange={(event) => setCustomerName(event.target.value)} style={inputStyle()} />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 9,
+                marginBottom: 9,
+              }}
+            >
+              <input
+                placeholder="Salesperson"
+                value={salesperson}
+                onChange={(event) => setSalesperson(event.target.value)}
+                style={inputStyle()}
+              />
+              <input
+                placeholder="Customer"
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                style={inputStyle()}
+              />
             </div>
           )}
 
           {!isInternal && showDetails && (
-            <input placeholder="Name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} style={{ ...inputStyle(), marginBottom: 9 }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 9 }}>
+              <input
+                placeholder="Name"
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                style={inputStyle()}
+              />
+              <input
+                placeholder="Phone or email (optional)"
+                value={contact}
+                onChange={(event) => setContact(event.target.value)}
+                style={inputStyle()}
+              />
+            </div>
           )}
 
-          {showDetails && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 9 }}>
-              <input placeholder="VIN" value={vin} onChange={(event) => setVin(event.target.value.toUpperCase())} style={inputStyle()} />
-              <input placeholder="Mileage" value={mileage} onChange={(event) => setMileage(event.target.value)} inputMode="numeric" style={inputStyle()} />
+          {isInternal && showDetails && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 9 }}>
+              <input
+                placeholder="VIN"
+                value={vin}
+                onChange={(event) => setVin(event.target.value.toUpperCase())}
+                style={inputStyle()}
+              />
+              <input
+                placeholder="Mileage"
+                value={mileage}
+                onChange={(event) => setMileage(event.target.value)}
+                inputMode="numeric"
+                style={inputStyle()}
+              />
+            </div>
+          )}
+
+          {!isInternal && showDetails && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 12,
+                borderRadius: 16,
+                background: "white",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                <div>
+                  <strong style={{ display: "block", fontSize: 13, color: dark }}>
+                    Vehicle details from scan
+                  </strong>
+                  <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
+                    Solace will read these from the VIN and odometer photos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowVehicleEdit((current) => !current)}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    background: showVehicleEdit ? "#fef2f2" : "#f8fafc",
+                    color: showVehicleEdit ? "#991b1b" : dark,
+                    borderRadius: 999,
+                    padding: "7px 10px",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {showVehicleEdit ? "Hide edit" : "Edit"}
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 10 }}>
+                <div style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 13 }}>
+                  <strong>VIN</strong>
+                  <br />
+                  <span style={{ color: detectedVin ? dark : muted }}>
+                    {detectedVin || "Will be detected from scan"}
+                  </span>
+                </div>
+                <div style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 13 }}>
+                  <strong>Mileage</strong>
+                  <br />
+                  <span style={{ color: detectedMileage ? dark : muted }}>
+                    {detectedMileage ? displayMileage(detectedMileage) || detectedMileage : "Will be detected from scan"}
+                  </span>
+                </div>
+              </div>
+
+              {showVehicleEdit && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 10 }}>
+                  <input
+                    placeholder="Edit VIN if needed"
+                    value={vin}
+                    onChange={(event) => setVin(event.target.value.toUpperCase())}
+                    style={inputStyle()}
+                  />
+                  <input
+                    placeholder="Edit mileage if needed"
+                    value={mileage}
+                    onChange={(event) => setMileage(event.target.value)}
+                    inputMode="numeric"
+                    style={inputStyle()}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -478,33 +773,100 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
               fontWeight: 900,
               cursor: submitting ? "wait" : "pointer",
               opacity: submitting ? 0.72 : 1,
-              boxShadow: isInternal ? "0 16px 32px rgba(15,23,42,0.18)" : "0 16px 32px rgba(185,28,28,0.22)",
+              boxShadow: isInternal
+                ? "0 16px 32px rgba(15,23,42,0.18)"
+                : "0 16px 32px rgba(185,28,28,0.22)",
             }}
           >
-            {submitting ? "Working..." : readyForValue ? "Get My Instant Cash Offer" : showDetails ? "Continue to Offer" : "Continue Photo Scan"}
+            {submitting
+              ? "Working..."
+              : canRequestOffer
+                ? "Get My Instant Cash Offer"
+                : showDetails
+                  ? "Continue to Offer"
+                  : "Continue Photo Scan"}
           </button>
         </div>
 
         {(statusMessage || errorMessage) && (
-          <div style={{ marginTop: 12, padding: 12, borderRadius: 16, background: errorMessage ? "#fef2f2" : "#f0fdf4", color: errorMessage ? "#991b1b" : "#166534", fontSize: 13, fontWeight: 800 }}>
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 16,
+              background: errorMessage ? "#fef2f2" : "#f0fdf4",
+              color: errorMessage ? "#991b1b" : "#166534",
+              fontSize: 13,
+              fontWeight: 800,
+            }}
+          >
             {errorMessage || statusMessage}
           </div>
         )}
 
         {value && (
-          <div style={{ marginTop: 14, padding: 16, borderRadius: 22, border: "1px solid #e2e8f0", background: "white" }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 999, background: "#f1f5f9", color: dark, fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+          <div
+            style={{
+              marginTop: 14,
+              padding: 16,
+              borderRadius: 22,
+              border: "1px solid #e2e8f0",
+              background: "white",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "7px 10px",
+                borderRadius: 999,
+                background: "#f1f5f9",
+                color: dark,
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom: 10,
+              }}
+            >
               <span style={{ width: 7, height: 7, borderRadius: 999, background: red }} />
               Solace Response
             </div>
-            <strong style={{ display: "block", fontSize: 24, letterSpacing: "-0.04em", lineHeight: 1.05 }}>{value.title || `Instant cash offer: ${formatMoney(value.offerAmount)}`}</strong>
+
+            <strong
+              style={{
+                display: "block",
+                fontSize: 24,
+                letterSpacing: "-0.04em",
+                lineHeight: 1.05,
+              }}
+            >
+              {value.title || `Instant cash offer: ${formatMoney(value.offerAmount)}`}
+            </strong>
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>Offer</strong><br />{formatMoney(value.offerAmount)}</span>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>State</strong><br />{value.admissibility}</span>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>Photos</strong><br />{capturedCount}/5</span>
+              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}>
+                <strong>Offer</strong>
+                <br />
+                {formatMoney(value.offerAmount)}
+              </span>
+              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}>
+                <strong>State</strong>
+                <br />
+                {value.admissibility}
+              </span>
+              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}>
+                <strong>Photos</strong>
+                <br />
+                {capturedCount}/5
+              </span>
             </div>
+
             {(value.summaryLines || []).map((line) => (
-              <p key={line} style={{ margin: "10px 0 0", color: "#334155", fontSize: 13, lineHeight: 1.45 }}>{line}</p>
+              <p key={line} style={{ margin: "10px 0 0", color: "#334155", fontSize: 13, lineHeight: 1.45 }}>
+                {line}
+              </p>
             ))}
 
             <div style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -536,21 +898,51 @@ export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = 
               </div>
             </div>
 
-            <input
-              placeholder={isInternal ? "Manager email or routing contact" : "Phone or email"}
-              value={contact}
-              onChange={(event) => setContact(event.target.value)}
-              style={{ ...inputStyle(), marginTop: 12 }}
-            />
+            {isInternal && (
+              <input
+                placeholder="Manager email or routing contact"
+                value={contact}
+                onChange={(event) => setContact(event.target.value)}
+                style={{ ...inputStyle(), marginTop: 12 }}
+              />
+            )}
+
             <button
               type="button"
               disabled={submitting}
               onClick={submitVehicleFile}
-              style={{ width: "100%", marginTop: 9, padding: 14, borderRadius: 15, border: "none", background: dark, color: "white", fontSize: 15, fontWeight: 900, cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.72 : 1 }}
+              style={{
+                width: "100%",
+                marginTop: 12,
+                padding: 14,
+                borderRadius: 15,
+                border: "none",
+                background: dark,
+                color: "white",
+                fontSize: 15,
+                fontWeight: 900,
+                cursor: submitting ? "wait" : "pointer",
+                opacity: submitting ? 0.72 : 1,
+              }}
             >
               {isInternal ? "Route to Used Car Manager" : customerIntent ? "Send My Vehicle File" : `Send to ${dealerName}`}
             </button>
-            <button type="button" onClick={resetScan} style={{ width: "100%", marginTop: 8, padding: 12, borderRadius: 15, border: "1px solid #cbd5e1", background: "white", color: "#334155", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+            <button
+              type="button"
+              onClick={resetScan}
+              style={{
+                width: "100%",
+                marginTop: 8,
+                padding: 12,
+                borderRadius: 15,
+                border: "1px solid #cbd5e1",
+                background: "white",
+                color: "#334155",
+                fontSize: 14,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
               Start over
             </button>
           </div>
