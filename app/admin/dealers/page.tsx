@@ -17,6 +17,18 @@ type Dealer = {
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+
+  /**
+   * Future-backed fields. These are optional so this page still works against the
+   * current dealers table/API while the billing + routing schema is finalized.
+   */
+  routing_cc_emails?: string | null;
+  billing_contact_name?: string | null;
+  billing_contact_email?: string | null;
+  billing_contact_phone?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  stripe_subscription_status?: string | null;
 };
 
 type DealerForm = {
@@ -26,6 +38,13 @@ type DealerForm = {
   legal_name: string;
   sales_phone: string;
   lead_email: string;
+  routing_cc_emails: string;
+  billing_contact_name: string;
+  billing_contact_email: string;
+  billing_contact_phone: string;
+  stripe_customer_id: string;
+  stripe_subscription_id: string;
+  stripe_subscription_status: string;
   address_line: string;
   city: string;
   state: string;
@@ -41,6 +60,13 @@ const blankForm: DealerForm = {
   legal_name: "",
   sales_phone: "",
   lead_email: "",
+  routing_cc_emails: "",
+  billing_contact_name: "",
+  billing_contact_email: "",
+  billing_contact_phone: "",
+  stripe_customer_id: "",
+  stripe_subscription_id: "",
+  stripe_subscription_status: "not_configured",
   address_line: "",
   city: "",
   state: "",
@@ -53,6 +79,8 @@ const dark = "#0f172a";
 const muted = "#64748b";
 const border = "#e2e8f0";
 const soft = "#f8fafc";
+const blueSoft = "#eff6ff";
+const amberSoft = "#fffbeb";
 
 function normalizeSlug(value: string) {
   return value
@@ -72,6 +100,13 @@ function dealerToForm(dealer: Dealer): DealerForm {
     legal_name: dealer.legal_name || "",
     sales_phone: dealer.sales_phone || "",
     lead_email: dealer.lead_email || "",
+    routing_cc_emails: dealer.routing_cc_emails || "",
+    billing_contact_name: dealer.billing_contact_name || "",
+    billing_contact_email: dealer.billing_contact_email || "",
+    billing_contact_phone: dealer.billing_contact_phone || "",
+    stripe_customer_id: dealer.stripe_customer_id || "",
+    stripe_subscription_id: dealer.stripe_subscription_id || "",
+    stripe_subscription_status: dealer.stripe_subscription_status || "not_configured",
     address_line: dealer.address_line || "",
     city: dealer.city || "",
     state: dealer.state || "",
@@ -81,8 +116,16 @@ function dealerToForm(dealer: Dealer): DealerForm {
   };
 }
 
-function hasRoutingEmail(dealer: Pick<Dealer, "lead_email">) {
-  return Boolean(dealer.lead_email && dealer.lead_email.includes("@"));
+function hasEmail(value: string | null | undefined) {
+  return Boolean(value && value.includes("@"));
+}
+
+function countEmailList(value: string | null | undefined) {
+  if (!value) return 0;
+  return value
+    .split(/[;,\n]/g)
+    .map((email) => email.trim())
+    .filter((email) => email.includes("@")).length;
 }
 
 function isErrorStatus(message: string) {
@@ -101,6 +144,16 @@ function fieldStyle(): CSSProperties {
     fontSize: 14,
     outline: "none",
     boxSizing: "border-box",
+  };
+}
+
+function textareaStyle(): CSSProperties {
+  return {
+    ...fieldStyle(),
+    minHeight: 86,
+    resize: "vertical",
+    lineHeight: 1.45,
+    fontFamily: "Arial, Helvetica, sans-serif",
   };
 }
 
@@ -129,11 +182,13 @@ function SectionHeader({ title, note }: { title: string; note?: string }) {
   );
 }
 
-function Pill({ children, tone }: { children: React.ReactNode; tone: "green" | "gray" | "amber" }) {
+function Pill({ children, tone }: { children: React.ReactNode; tone: "green" | "gray" | "amber" | "blue" | "red" }) {
   const styles: Record<typeof tone, CSSProperties> = {
     green: { background: "#dcfce7", color: "#166534" },
     gray: { background: "#e2e8f0", color: "#475569" },
     amber: { background: "#fef3c7", color: "#92400e" },
+    blue: { background: "#dbeafe", color: "#1d4ed8" },
+    red: { background: "#fee2e2", color: "#991b1b" },
   };
 
   return (
@@ -156,6 +211,35 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "green" | "
   );
 }
 
+function MiniField({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        padding: 10,
+        borderRadius: 14,
+        background: soft,
+        border: `1px solid ${border}`,
+        minWidth: 0,
+      }}
+    >
+      <span style={{ display: "block", color: muted, fontSize: 11, fontWeight: 900 }}>
+        {label}
+      </span>
+      <span
+        style={{
+          display: "block",
+          color: dark,
+          fontSize: 12,
+          marginTop: 3,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value || "Not set"}
+      </span>
+    </div>
+  );
+}
+
 export default function AdminDealersPage() {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [form, setForm] = useState<DealerForm>(blankForm);
@@ -165,13 +249,26 @@ export default function AdminDealersPage() {
   const [search, setSearch] = useState("");
 
   const isEditing = Boolean(form.id);
+  const routingCcCount = countEmailList(form.routing_cc_emails);
+  const billingReady = hasEmail(form.billing_contact_email);
+  const stripeReady = Boolean(form.stripe_customer_id || form.stripe_subscription_id);
 
   const filteredDealers = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return dealers;
 
     return dealers.filter((dealer) =>
-      [dealer.name, dealer.slug, dealer.lead_email, dealer.city, dealer.state]
+      [
+        dealer.name,
+        dealer.slug,
+        dealer.lead_email,
+        dealer.routing_cc_emails,
+        dealer.billing_contact_name,
+        dealer.billing_contact_email,
+        dealer.stripe_customer_id,
+        dealer.city,
+        dealer.state,
+      ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query)),
     );
@@ -227,9 +324,24 @@ export default function AdminDealersPage() {
     setStatus("");
 
     try {
+      /**
+       * Keep the payload compatible with the current /api/admin/dealers route.
+       * Add the billing/routing/Stripe fields to the API + dealers table before
+       * persisting them, otherwise Supabase/PostgREST may reject unknown columns.
+       */
       const payload = {
-        ...form,
+        id: form.id,
         slug: normalizeSlug(form.slug),
+        name: form.name,
+        legal_name: form.legal_name,
+        sales_phone: form.sales_phone,
+        lead_email: form.lead_email,
+        address_line: form.address_line,
+        city: form.city,
+        state: form.state,
+        postal_code: form.postal_code,
+        brand_color: form.brand_color,
+        is_active: form.is_active,
       };
 
       const response = await fetch("/api/admin/dealers", {
@@ -244,7 +356,22 @@ export default function AdminDealersPage() {
         throw new Error(json.error || "Could not save dealer.");
       }
 
-      setStatus(isEditing ? "Dealer updated." : "Dealer created.");
+      const futureFieldsEntered = Boolean(
+        form.routing_cc_emails ||
+          form.billing_contact_name ||
+          form.billing_contact_email ||
+          form.billing_contact_phone ||
+          form.stripe_customer_id ||
+          form.stripe_subscription_id,
+      );
+
+      setStatus(
+        futureFieldsEntered
+          ? `${isEditing ? "Dealer updated" : "Dealer created"}. Billing, CC routing, and Stripe fields are staged in the UI; add the database/API fields before they persist.`
+          : isEditing
+            ? "Dealer updated."
+            : "Dealer created.",
+      );
       setForm(blankForm);
       await loadDealers();
     } catch (error) {
@@ -298,7 +425,7 @@ export default function AdminDealersPage() {
     >
       <style>{`
         .admin-shell {
-          max-width: 1180px;
+          max-width: 1220px;
           margin: 0 auto;
         }
 
@@ -312,7 +439,7 @@ export default function AdminDealersPage() {
 
         .admin-grid {
           display: grid;
-          grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.35fr);
+          grid-template-columns: minmax(360px, 0.92fr) minmax(0, 1.32fr);
           gap: 18px;
           align-items: start;
         }
@@ -356,7 +483,14 @@ export default function AdminDealersPage() {
           margin-top: 14px;
         }
 
-        @media (max-width: 900px) {
+        .future-panel {
+          padding: 12px;
+          border-radius: 18px;
+          background: ${amberSoft};
+          border: 1px solid #fde68a;
+        }
+
+        @media (max-width: 960px) {
           main {
             padding: 12px !important;
           }
@@ -422,9 +556,9 @@ export default function AdminDealersPage() {
             >
               Dealer dashboard.
             </h1>
-            <p style={{ margin: "8px 0 0", color: muted, maxWidth: 720, lineHeight: 1.55 }}>
-              Create dealers, configure the used car manager routing email, and control the customer
-              and internal intake links from one place.
+            <p style={{ margin: "8px 0 0", color: muted, maxWidth: 760, lineHeight: 1.55 }}>
+              Create dealers, configure manager routing, identify billing ownership, and prepare each
+              dealer for Stripe subscription setup.
             </p>
           </div>
 
@@ -456,7 +590,7 @@ export default function AdminDealersPage() {
                   {isEditing ? "Edit dealer" : "Create dealer"}
                 </h2>
                 <p style={{ margin: "5px 0 0", color: muted, fontSize: 13, lineHeight: 1.45 }}>
-                  Name, slug, and manager routing email are required.
+                  Name, slug, and primary manager routing email are required.
                 </p>
               </div>
 
@@ -503,41 +637,185 @@ export default function AdminDealersPage() {
 
             <SectionHeader
               title="Used car manager routing"
-              note="Trade appraisal packets are automatically sent to this email for approval."
+              note="Trade appraisal packets route here automatically. Leave room for additional managers, GSM, or GM visibility."
             />
             <div
               style={{
                 padding: 12,
                 borderRadius: 18,
-                background: "#f8fafc",
+                background: blueSoft,
                 border: "1px solid #dbeafe",
               }}
             >
-              <label style={labelStyle()}>
-                Used Car Manager Email
-                <input
-                  required
-                  type="email"
-                  value={form.lead_email}
-                  onChange={(event) => updateField("lead_email", event.target.value)}
-                  placeholder="manager@dealer.com"
-                  style={fieldStyle()}
+              <div className="field-grid">
+                <label style={labelStyle()}>
+                  Primary Used Car Manager Email
+                  <input
+                    required
+                    type="email"
+                    value={form.lead_email}
+                    onChange={(event) => updateField("lead_email", event.target.value)}
+                    placeholder="manager@dealer.com"
+                    style={fieldStyle()}
+                  />
+                </label>
+
+                <label style={labelStyle()}>
+                  Additional Routing Emails
+                  <textarea
+                    value={form.routing_cc_emails}
+                    onChange={(event) => updateField("routing_cc_emails", event.target.value)}
+                    placeholder="gsm@dealer.com, gm@dealer.com, secondmanager@dealer.com"
+                    style={textareaStyle()}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 8,
+                }}
+              >
+                <MiniField label="Primary packet route" value={form.lead_email || "Required"} />
+                <MiniField
+                  label="Additional routing"
+                  value={routingCcCount ? `${routingCcCount} additional email${routingCcCount === 1 ? "" : "s"}` : "Optional"}
                 />
-              </label>
+              </div>
+
               <div
                 style={{
                   marginTop: 10,
                   padding: "10px 11px",
                   borderRadius: 14,
                   background: "white",
-                  border: "1px solid #e2e8f0",
+                  border: `1px solid ${border}`,
                   color: muted,
                   fontSize: 12,
                   lineHeight: 1.45,
                 }}
               >
-                Salespeople will not enter this manually. The internal intake flow uses this saved
-                routing address when the packet is submitted.
+                Salespeople will not enter manager emails manually. The internal intake flow should use
+                this saved routing configuration when the packet is submitted.
+              </div>
+            </div>
+
+            <SectionHeader
+              title="Billing contact"
+              note="Identify who receives invoices, receipts, payment updates, and subscription notices."
+            />
+            <div className="future-panel">
+              <div className="field-grid">
+                <label style={labelStyle()}>
+                  Billing Contact Name
+                  <input
+                    value={form.billing_contact_name}
+                    onChange={(event) => updateField("billing_contact_name", event.target.value)}
+                    placeholder="Controller, office manager, or dealer principal"
+                    style={fieldStyle()}
+                  />
+                </label>
+
+                <div className="two-col">
+                  <label style={labelStyle()}>
+                    Billing Email
+                    <input
+                      type="email"
+                      value={form.billing_contact_email}
+                      onChange={(event) => updateField("billing_contact_email", event.target.value)}
+                      placeholder="billing@dealer.com"
+                      style={fieldStyle()}
+                    />
+                  </label>
+
+                  <label style={labelStyle()}>
+                    Billing Phone
+                    <input
+                      value={form.billing_contact_phone}
+                      onChange={(event) => updateField("billing_contact_phone", event.target.value)}
+                      placeholder="Optional"
+                      style={fieldStyle()}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <SectionHeader
+              title="Stripe setup"
+              note="Use Stripe for monthly billing once the dealer is approved and billing contact is confirmed."
+            />
+            <div className="future-panel">
+              <div className="field-grid">
+                <div className="two-col">
+                  <label style={labelStyle()}>
+                    Stripe Customer ID
+                    <input
+                      value={form.stripe_customer_id}
+                      onChange={(event) => updateField("stripe_customer_id", event.target.value)}
+                      placeholder="cus_..."
+                      style={fieldStyle()}
+                    />
+                  </label>
+
+                  <label style={labelStyle()}>
+                    Subscription Status
+                    <select
+                      value={form.stripe_subscription_status}
+                      onChange={(event) => updateField("stripe_subscription_status", event.target.value)}
+                      style={fieldStyle()}
+                    >
+                      <option value="not_configured">Not configured</option>
+                      <option value="trialing">Trialing</option>
+                      <option value="active">Active</option>
+                      <option value="past_due">Past due</option>
+                      <option value="paused">Paused</option>
+                      <option value="canceled">Canceled</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label style={labelStyle()}>
+                  Stripe Subscription ID
+                  <input
+                    value={form.stripe_subscription_id}
+                    onChange={(event) => updateField("stripe_subscription_id", event.target.value)}
+                    placeholder="sub_..."
+                    style={fieldStyle()}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 8,
+                  marginTop: 10,
+                }}
+              >
+                <MiniField label="Billing owner" value={billingReady ? "Ready" : "Missing email"} />
+                <MiniField label="Stripe record" value={stripeReady ? "Linked" : "Not linked"} />
+                <MiniField label="Default plan" value="$595 / month" />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "10px 11px",
+                  borderRadius: 14,
+                  background: "white",
+                  border: `1px solid ${border}`,
+                  color: muted,
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                }}
+              >
+                Next implementation step: create Stripe customer from billing contact, attach the $595/month
+                price, store customer/subscription IDs, and listen for invoice/payment webhooks.
               </div>
             </div>
 
@@ -678,6 +956,7 @@ export default function AdminDealersPage() {
                   color: statusIsError ? "#991b1b" : "#166534",
                   fontSize: 13,
                   fontWeight: 800,
+                  lineHeight: 1.45,
                 }}
               >
                 {status}
@@ -714,13 +993,16 @@ export default function AdminDealersPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search dealers, slugs, manager emails, or locations"
+              placeholder="Search dealers, slugs, emails, billing contacts, or Stripe IDs"
               style={{ ...fieldStyle(), marginTop: 12 }}
             />
 
             <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
               {filteredDealers.map((dealer) => {
-                const routingConfigured = hasRoutingEmail(dealer);
+                const routingConfigured = hasEmail(dealer.lead_email);
+                const extraRoutingCount = countEmailList(dealer.routing_cc_emails);
+                const dealerBillingReady = hasEmail(dealer.billing_contact_email);
+                const dealerStripeLinked = Boolean(dealer.stripe_customer_id || dealer.stripe_subscription_id);
 
                 return (
                   <article
@@ -758,6 +1040,12 @@ export default function AdminDealersPage() {
                         <Pill tone={routingConfigured ? "green" : "amber"}>
                           {routingConfigured ? "Routing set" : "Routing missing"}
                         </Pill>
+                        <Pill tone={dealerBillingReady ? "green" : "amber"}>
+                          {dealerBillingReady ? "Billing set" : "Billing needed"}
+                        </Pill>
+                        <Pill tone={dealerStripeLinked ? "green" : "blue"}>
+                          {dealerStripeLinked ? "Stripe linked" : "Stripe pending"}
+                        </Pill>
                       </div>
                     </div>
 
@@ -769,36 +1057,24 @@ export default function AdminDealersPage() {
                         marginTop: 12,
                       }}
                     >
-                      <div
-                        style={{
-                          padding: 10,
-                          borderRadius: 14,
-                          background: soft,
-                          border: `1px solid ${border}`,
-                        }}
-                      >
-                        <span style={{ display: "block", color: muted, fontSize: 11, fontWeight: 900 }}>
-                          Customer link
-                        </span>
-                        <span style={{ display: "block", color: dark, fontSize: 12, marginTop: 3 }}>
-                          /{dealer.slug}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          padding: 10,
-                          borderRadius: 14,
-                          background: soft,
-                          border: `1px solid ${border}`,
-                        }}
-                      >
-                        <span style={{ display: "block", color: muted, fontSize: 11, fontWeight: 900 }}>
-                          Internal link
-                        </span>
-                        <span style={{ display: "block", color: dark, fontSize: 12, marginTop: 3 }}>
-                          /{dealer.slug}/internal
-                        </span>
-                      </div>
+                      <MiniField label="Customer link" value={`/${dealer.slug}`} />
+                      <MiniField label="Internal link" value={`/${dealer.slug}/internal`} />
+                      <MiniField
+                        label="Additional routing"
+                        value={extraRoutingCount ? `${extraRoutingCount} additional` : "None"}
+                      />
+                      <MiniField
+                        label="Billing contact"
+                        value={dealer.billing_contact_email || dealer.billing_contact_name || "Not set"}
+                      />
+                      <MiniField
+                        label="Stripe customer"
+                        value={dealer.stripe_customer_id || "Not linked"}
+                      />
+                      <MiniField
+                        label="Subscription"
+                        value={dealer.stripe_subscription_status || "Not configured"}
+                      />
                     </div>
 
                     <div className="dealer-actions">
