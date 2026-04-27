@@ -8,6 +8,22 @@ import {
   stripe,
 } from "@/lib/stripe";
 
+type DealerBillingRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  legal_name: string | null;
+  lead_email: string | null;
+  billing_contact_name: string | null;
+  billing_email: string | null;
+  billing_phone: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_price_id?: string | null;
+  billing_status: string | null;
+};
+
 const DEALER_SELECT = [
   "id",
   "slug",
@@ -19,6 +35,8 @@ const DEALER_SELECT = [
   "billing_phone",
   "stripe_customer_id",
   "stripe_subscription_id",
+  "stripe_checkout_session_id",
+  "stripe_price_id",
   "billing_status",
 ].join(", ");
 
@@ -34,6 +52,7 @@ export async function POST(request: NextRequest) {
     >;
 
     const dealerId = cleanText(body.dealer_id, 80);
+
     if (!dealerId) {
       return NextResponse.json(
         { error: "Dealer id is required." },
@@ -41,19 +60,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: dealer, error: dealerError } = await supabaseAdmin
+    const { data: rawDealer, error: dealerError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("dealers")
       .select(DEALER_SELECT)
       .eq("id", dealerId)
       .single();
 
-    if (dealerError || !dealer) {
+    if (dealerError || !rawDealer) {
       return NextResponse.json(
         { error: dealerError?.message || "Dealer not found." },
         { status: 404 }
       );
     }
+
+    const dealer = rawDealer as unknown as DealerBillingRecord;
 
     if (isActiveBillingStatus(dealer.billing_status)) {
       return NextResponse.json(
@@ -63,6 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const billingEmail = dealer.billing_email || dealer.lead_email;
+
     if (!billingEmail) {
       return NextResponse.json(
         { error: "Billing email or manager routing email is required." },
@@ -70,7 +92,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let stripeCustomerId = dealer.stripe_customer_id as string | null;
+    let stripeCustomerId = dealer.stripe_customer_id;
 
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
@@ -162,6 +184,7 @@ export async function POST(request: NextRequest) {
       error instanceof Error
         ? error.message
         : "Unknown Stripe checkout session error.";
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
