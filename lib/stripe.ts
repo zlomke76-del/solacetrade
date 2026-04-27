@@ -10,28 +10,29 @@ export const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2025-02-24.acacia",
 });
 
+export function getAppBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}` ||
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
+}
+
+export const getAppUrl = getAppBaseUrl;
+
 export function getStripeMonthlyPriceId() {
-  const priceId = process.env.STRIPE_MONTHLY_PRICE_ID;
-
-  if (!priceId) {
-    throw new Error("Missing STRIPE_MONTHLY_PRICE_ID environment variable.");
-  }
-
-  return priceId;
+  const value = process.env.STRIPE_MONTHLY_PRICE_ID;
+  if (!value) throw new Error("Missing STRIPE_MONTHLY_PRICE_ID environment variable.");
+  return value;
 }
 
 export function getStripeSetupPriceId() {
-  const priceId = process.env.STRIPE_SETUP_PRICE_ID;
-
-  if (!priceId) {
-    throw new Error("Missing STRIPE_SETUP_PRICE_ID environment variable.");
-  }
-
-  return priceId;
+  const value = process.env.STRIPE_SETUP_PRICE_ID;
+  if (!value) throw new Error("Missing STRIPE_SETUP_PRICE_ID environment variable.");
+  return value;
 }
 
-export function getAppUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL || "https://www.solacetrade.ai").replace(/\/$/, "");
+export function isSetupFeeWaived(now = new Date()) {
+  const cutoff = new Date("2026-07-01T00:00:00-05:00");
+  return now < cutoff;
 }
-
-export const getAppBaseUrl = getAppUrl;
