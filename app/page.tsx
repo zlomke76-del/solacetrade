@@ -333,46 +333,39 @@ export default function Page() {
               <span>$595/mo</span>
             </a>
 
-            <div style={{ position: "relative", marginTop: 10 }}>
-              <div
-                style={{
-                  position: "absolute",
-                  top: -12,
-                  left: 14,
-                  right: 14,
-                  zIndex: 3,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  background: "linear-gradient(90deg, #b91c1c, #ef4444)",
-                  color: "white",
-                  fontSize: 11,
-                  fontWeight: 950,
-                  letterSpacing: "0.05em",
-                  textTransform: "uppercase",
-                  boxShadow: "0 12px 26px rgba(185,28,28,0.32)",
-                  border: "1px solid rgba(255,255,255,0.35)",
-                }}
-              >
-                Waived for signups before July 1
-              </div>
+<div style={{ marginTop: 10 }}>
+  {/* WAIVER BADGE */}
+  <div
+    style={{
+      background: "#16a34a",
+      color: "white",
+      fontWeight: 900,
+      fontSize: 11,
+      padding: "6px 10px",
+      borderRadius: 999,
+      display: "inline-block",
+      marginBottom: 8,
+    }}
+  >
+    SETUP FEE WAIVED BEFORE JULY 1
+  </div>
 
-              <a
-                href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  ...secondaryBtn,
-                  paddingTop: 20,
-                  opacity: 0.82,
-                }}
-              >
-                <span>Pay Setup Fee</span>
-                <span style={{ textDecoration: "line-through", opacity: 0.8 }}>$299</span>
-              </a>
-            </div>
+  {/* BUTTON (DIMMED) */}
+  <a
+    href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
+    target="_blank"
+    style={{
+      ...secondaryBtn,
+      background: "#f1f5f9",
+      color: "#64748b",
+      textDecoration: "line-through",
+      cursor: "not-allowed",
+      opacity: 0.7,
+    }}
+  >
+    Pay Setup Fee — $299
+  </a>
+</div>
 
             <p
               style={{
