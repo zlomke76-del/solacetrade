@@ -30,20 +30,8 @@ export function getStripeSetupPriceId() {
   return priceId;
 }
 
-export function getStripeWebhookSecret() {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
-    throw new Error("Missing STRIPE_WEBHOOK_SECRET environment variable.");
-  }
-
-  return webhookSecret;
-}
-
 export function getAppUrl() {
   return (process.env.NEXT_PUBLIC_APP_URL || "https://www.solacetrade.ai").replace(/\/$/, "");
 }
 
-export function isActiveBillingStatus(status: string | null | undefined) {
-  return status === "active" || status === "trialing";
-}
+export const getAppBaseUrl = getAppUrl;
