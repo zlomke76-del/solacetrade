@@ -22,15 +22,13 @@ function extensionFor(file: File) {
   const match = source.match(/\.([a-zA-Z0-9]+)$/);
 
   return (
-    (match?.[1] || fallback)
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "") || fallback
+    (match?.[1] || fallback).toLowerCase().replace(/[^a-z0-9]/g, "") || fallback
   );
 }
 
 export async function POST(
   request: NextRequest,
-  context: { params: { dealerSlug: string } }
+  context: { params: { dealerSlug: string } },
 ) {
   try {
     const { dealerSlug } = context.params;
@@ -42,6 +40,11 @@ export async function POST(
         ? "internal"
         : "customer";
 
+    // Evidence-only rule: VIN and mileage are never accepted from the customer.
+    // They must be derived later from the uploaded VIN and odometer photos.
+    const vin = "";
+    const mileage = null;
+
     const customerName = cleanText(formData.get("customerName"), 160);
     const customerContact = cleanText(formData.get("contact"), 180);
     const salesperson = cleanText(formData.get("salesperson"), 160);
@@ -51,27 +54,16 @@ export async function POST(
       .map((stepKey) => ({ stepKey, file: formData.get(stepKey) }))
       .filter(
         (entry): entry is { stepKey: string; file: File } =>
-          entry.file instanceof File && entry.file.size > 0
+          entry.file instanceof File && entry.file.size > 0,
       );
-
-    const receivedSteps = photoEntries.map((entry) => entry.stepKey);
-    const missingSteps = photoSteps.filter((step) => !receivedSteps.includes(step));
 
     if (photoEntries.length !== photoSteps.length) {
       return NextResponse.json(
         {
-          error: "All five guided vehicle photos are required before intake can be created.",
-          receivedSteps,
-          missingSteps,
+          error:
+            "All five guided vehicle photos are required before intake can be created.",
         },
-        { status: 400 }
-      );
-    }
-
-    if (!customerName) {
-      return NextResponse.json(
-        { error: "Customer name is required before creating the offer file." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -85,8 +77,8 @@ export async function POST(
         customer_name: customerName || null,
         customer_contact: customerContact || null,
         salesperson: salesperson || null,
-        vin: null,
-        mileage: null,
+        vin: vin || null,
+        mileage: mileage || null,
         manager_notes: managerNotes || null,
         photo_count: photoEntries.length,
       })
@@ -113,7 +105,9 @@ export async function POST(
         });
 
       if (uploadError) {
-        throw new Error(`Photo upload failed for ${stepKey}: ${uploadError.message}`);
+        throw new Error(
+          `Photo upload failed for ${stepKey}: ${uploadError.message}`,
+        );
       }
 
       uploadedPaths.push(storagePath);
@@ -160,8 +154,9 @@ export async function POST(
       payload: {
         photoCount: uploadedPaths.length,
         mode,
-        vinSource: "image_evidence_only",
-        mileageSource: "image_evidence_only",
+        evidenceOnly: true,
+        hasManualVin: false,
+        hasManualMileage: false,
       },
     });
 
@@ -175,7 +170,9 @@ export async function POST(
       photoPaths: uploadedPaths,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown intake error.";
+    const message =
+      error instanceof Error ? error.message : "Unknown intake error.";
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
