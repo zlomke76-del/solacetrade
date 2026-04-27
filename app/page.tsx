@@ -12,6 +12,7 @@ export default function Page() {
         fontFamily: "Arial, Helvetica, sans-serif",
       }}
     >
+      {/* Top Bar */}
       <div
         style={{
           background: "#0b0b0b",
@@ -22,9 +23,10 @@ export default function Page() {
           textAlign: "center",
         }}
       >
-        Sales: (979) 451-6727 | 1880 US-290, Brenham, TX
+        Sales: (979) 451-6727 • 1880 US-290, Brenham, TX
       </div>
 
+      {/* Header */}
       <header
         style={{
           background: "white",
@@ -33,13 +35,14 @@ export default function Page() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          gap: 16,
           position: "sticky",
           top: 0,
           zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: 15 }}>Brenham Chrysler Jeep Dodge Ram</strong>
+        <strong style={{ fontSize: 15 }}>
+          Brenham Chrysler Jeep Dodge Ram
+        </strong>
 
         <nav
           style={{
@@ -47,7 +50,6 @@ export default function Page() {
             gap: 18,
             fontSize: 14,
             fontWeight: 700,
-            whiteSpace: "nowrap",
           }}
         >
           <span>New</span>
@@ -57,20 +59,22 @@ export default function Page() {
         </nav>
       </header>
 
+      {/* HERO */}
       <section
         style={{
-          padding: "76px 20px 46px",
+          padding: "72px 20px 28px",
           textAlign: "center",
           background:
-            "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.12), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%)",
+            "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.10), transparent 36%), linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%)",
         }}
       >
+        {/* Badge */}
         <div
           style={{
             display: "inline-flex",
             gap: 8,
             alignItems: "center",
-            padding: "7px 12px",
+            padding: "6px 12px",
             borderRadius: 999,
             background: "#fee2e2",
             color: "#991b1b",
@@ -78,78 +82,38 @@ export default function Page() {
             fontWeight: 900,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
-            marginBottom: 16,
+            marginBottom: 14,
           }}
         >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 99,
-              background: "#dc2626",
-            }}
-          />
           TradeDesk by Solace
         </div>
 
+        {/* Headline */}
         <h1
           style={{
-            margin: "0 auto 14px",
-            maxWidth: 960,
-            fontSize: "clamp(38px, 7vw, 74px)",
+            margin: "0 auto 10px",
+            maxWidth: 880,
+            fontSize: "clamp(36px, 6vw, 68px)",
             lineHeight: 0.95,
-            letterSpacing: "-0.06em",
+            letterSpacing: "-0.05em",
           }}
         >
-          Get a real vehicle offer in minutes — just take a few photos.
+          Get a real vehicle offer in minutes.
         </h1>
 
+        {/* Subtitle */}
         <p
           style={{
-            margin: "0 auto 24px",
-            maxWidth: 770,
+            margin: "0 auto 18px",
+            maxWidth: 620,
             fontSize: 18,
-            lineHeight: 1.55,
             color: "#475569",
           }}
         >
-          Your car is the application. TradeDesk guides you through a live vehicle scan,
-          checks open recall readiness, captures condition signals, and builds a Brenham
-          CDJR offer file for review.
+          Capture your vehicle. The rest is handled.
         </p>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 10,
-            flexWrap: "wrap",
-            marginBottom: 24,
-          }}
-        >
-          {[
-            "Live vehicle scan",
-            "Free open recall check",
-            "Preliminary offer path",
-            "Dealer-ready vehicle file",
-          ].map((item) => (
-            <span
-              key={item}
-              style={{
-                padding: "9px 13px",
-                borderRadius: 999,
-                background: "white",
-                border: "1px solid #e5e7eb",
-                fontSize: 13,
-                fontWeight: 800,
-                boxShadow: "0 10px 30px rgba(15,23,42,0.06)",
-              }}
-            >
-              {item}
-            </span>
-          ))}
-        </div>
-
+        {/* CTA */}
         <a
           href="#vehicle-scan"
           style={{
@@ -168,45 +132,60 @@ export default function Page() {
         >
           Start Vehicle Scan
         </a>
+
+        {/* Micro trust */}
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 13,
+            color: "#64748b",
+          }}
+        >
+          Takes about 2 minutes • No appointment needed
+        </div>
       </section>
 
+      {/* SCAN — PULLED UP (important UX fix) */}
       <section
         id="vehicle-scan"
         style={{
           maxWidth: 820,
-          margin: "0 auto",
-          padding: "42px 18px 56px",
+          margin: "-20px auto 40px",
+          padding: "0 18px",
         }}
       >
         <TradeDesk mode="customer" />
       </section>
 
+      {/* SUPPORT SECTION */}
       <section
         style={{
-          padding: "44px 20px",
+          padding: "36px 20px",
           background: "white",
           borderTop: "1px solid #e5e7eb",
           textAlign: "center",
         }}
       >
-        <h2 style={{ margin: "0 0 10px", fontSize: 30, letterSpacing: "-0.03em" }}>
-          More useful than a trade form.
+        <h2 style={{ margin: "0 0 10px", fontSize: 28 }}>
+          Built for real vehicle decisions.
         </h2>
+
         <p
           style={{
             margin: "0 auto",
-            maxWidth: 760,
+            maxWidth: 700,
             color: "#475569",
-            lineHeight: 1.65,
+            lineHeight: 1.6,
             fontSize: 16,
           }}
         >
-          TradeDesk helps customers understand their vehicle before they sell: recall
-          status, condition readiness, missing verification items, and whether the file is
-          complete enough for a stronger preliminary offer.
+          TradeDesk captures your vehicle as it is, checks recall readiness,
+          and prepares a structured file for Brenham CDJR to review — without
+          back-and-forth or guesswork.
         </p>
       </section>
 
+      {/* FOOTER */}
       <footer
         style={{
           padding: 22,
