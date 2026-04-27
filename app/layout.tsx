@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Brenham CDJR TradeDesk",
+  title: "Solace TradeDesk",
   icons: {
     icon: "/favicon.svg",
   },
