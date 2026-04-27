@@ -10,6 +10,13 @@ export type DealerRecord = {
   legal_name: string | null;
   sales_phone: string | null;
   lead_email: string;
+  routing_cc_emails?: string[] | null;
+  billing_contact_name?: string | null;
+  billing_email?: string | null;
+  billing_phone?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  billing_status?: string | null;
   address_line: string | null;
   city: string | null;
   state: string | null;
@@ -77,7 +84,7 @@ export async function getDealerBySlug(dealerSlug: string): Promise<DealerRecord>
     .schema(SOLACETRADE_SCHEMA)
     .from("dealers")
     .select(
-      "id, slug, name, legal_name, sales_phone, lead_email, address_line, city, state, postal_code, brand_color, is_active"
+      "id, slug, name, legal_name, sales_phone, lead_email, routing_cc_emails, billing_contact_name, billing_email, billing_phone, stripe_customer_id, stripe_subscription_id, billing_status, address_line, city, state, postal_code, brand_color, is_active"
     )
     .eq("slug", slug)
     .eq("is_active", true)
@@ -92,6 +99,14 @@ export async function getDealerBySlug(dealerSlug: string): Promise<DealerRecord>
   }
 
   return data as DealerRecord;
+}
+
+export function formatDealerPhoneLine(dealer: DealerRecord) {
+  const phone = cleanText(dealer.sales_phone, 80) || "Sales team";
+  const cityState = [dealer.city, dealer.state].filter(Boolean).join(", ");
+  const address = [dealer.address_line, cityState].filter(Boolean).join(" • ");
+
+  return address ? `Sales: ${phone} • ${address}` : `Sales: ${phone}`;
 }
 
 export async function createSignedPhotoUrls(photoPaths: string[]) {
