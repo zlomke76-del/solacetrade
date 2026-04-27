@@ -14,15 +14,34 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function generateCertificateId() {
+  return `TC-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+}
+
 function escapeHtml(value: unknown) {
   return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function generateCertificateId() {
-  return `TC-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+function getArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
+function formatMileage(value: unknown) {
+  const raw = String(value || "").replace(/[^\d]/g, "");
+  const number = Number(raw);
+
+  if (!number) return "Not detected";
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(number);
 }
 
 export async function POST(
@@ -35,9 +54,9 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
 
     const intakeId = cleanText(body?.intakeId, 80);
-    const customerName = cleanText(body?.customerName, 160);
-    const email = cleanText(body?.contact, 180);
     const customerIntent = cleanText(body?.customerIntent, 80);
+    const customerContact = cleanText(body?.contact, 180);
+    const customerName = cleanText(body?.customerName, 160);
 
     if (!intakeId) {
       return NextResponse.json({ error: "Missing intakeId." }, { status: 400 });
@@ -47,14 +66,14 @@ export async function POST(
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
     }
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(customerContact)) {
       return NextResponse.json(
         { error: "Enter a valid email to receive your trade certificate." },
         { status: 400 }
       );
     }
 
-    const { data: intake } = await supabaseAdmin
+    const { data: intake, error: intakeError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
       .select("*")
@@ -62,110 +81,198 @@ export async function POST(
       .eq("dealer_id", dealer.id)
       .single();
 
-    if (!intake) {
+    if (intakeError || !intake) {
       return NextResponse.json(
-        { error: "Trade intake not found." },
+        { error: intakeError?.message || "Trade intake not found." },
         { status: 404 }
       );
     }
 
-    const certificateId = generateCertificateId();
+    const updatePayload = {
+      status: "submitted",
+      customer_intent: customerIntent || intake.customer_intent || null,
+      customer_contact: customerContact,
+      customer_name: customerName,
+      submitted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: updateError } = await supabaseAdmin
+      .schema(SOLACETRADE_SCHEMA)
+      .from("trade_intakes")
+      .update(updatePayload)
+      .eq("id", intake.id)
+      .eq("dealer_id", dealer.id);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
 
     const valuePayload =
       intake.value_payload && typeof intake.value_payload === "object"
         ? intake.value_payload
         : {};
 
-    const offerAmount =
-      intake.offer_amount ?? valuePayload.offerAmount ?? null;
+    const summaryLines = getArray(valuePayload.summaryLines);
+    const reviewNotes = getArray(valuePayload.dealerReviewNotes);
+    const conditionNotes = getArray(valuePayload.conditionNotes);
 
+    const signedPhotos = await createSignedPhotoUrls(
+      Array.isArray(intake.photo_paths) ? intake.photo_paths : []
+    );
+
+    const photoLinks = signedPhotos
+      .map((photo, index) =>
+        photo.signedUrl
+          ? `<li><a href="${escapeHtml(photo.signedUrl)}">Photo ${index + 1}</a></li>`
+          : `<li>${escapeHtml(photo.path)}</li>`
+      )
+      .join("");
+
+    const offerAmount = intake.offer_amount ?? valuePayload.offerAmount ?? null;
+    const confidence = valuePayload.confidence || "Pending";
+    const admissibility = valuePayload.admissibility || "Pending";
+    const certificateId = generateCertificateId();
     const vehicleLabel = [
-      valuePayload.vehicleYear,
-      valuePayload.vehicleMake,
-      valuePayload.vehicleModel,
-      valuePayload.vehicleTrim,
+      valuePayload.vehicleYear ?? valuePayload.year ?? valuePayload.vehicle?.year,
+      valuePayload.vehicleMake ?? valuePayload.make ?? valuePayload.vehicle?.make,
+      valuePayload.vehicleModel ?? valuePayload.model ?? valuePayload.vehicle?.model,
+      valuePayload.vehicleTrim ?? valuePayload.trim ?? valuePayload.vehicle?.trim,
     ]
       .filter(Boolean)
-      .join(" ");
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const mileage =
+      intake.mileage ??
+      valuePayload.detectedMileage ??
+      valuePayload.mileage ??
+      valuePayload.vehicle?.mileage ??
+      null;
+
+    const subject = `Your Trade Certificate – ${formatMoney(offerAmount)}`;
 
     const html = `
-      <div style="font-family:Arial;padding:24px;background:#f4f6f8;">
-        <div style="max-width:520px;margin:auto;background:#fff;padding:24px;border-radius:16px;">
-          
-          <div style="font-size:12px;text-transform:uppercase;color:#64748b;font-weight:700;">
-            Trade Certificate
+      <div style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;">
+        <div style="max-width:620px;margin:0 auto;padding:24px;">
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:22px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.12);">
+            <div style="background:linear-gradient(135deg,#0f172a,#334155);color:#ffffff;padding:22px 24px;">
+              <div style="font-size:11px;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#cbd5e1;">SolaceTrade Certificate</div>
+              <h1 style="margin:8px 0 0;font-size:30px;line-height:1.05;letter-spacing:-0.04em;">${escapeHtml(formatMoney(offerAmount))}</h1>
+              <div style="margin-top:8px;font-size:14px;color:#e2e8f0;">Preliminary trade certificate pending dealer verification</div>
+            </div>
+
+            <div style="padding:22px 24px;">
+              <div style="font-size:12px;font-weight:900;color:#64748b;letter-spacing:0.1em;text-transform:uppercase;">Certificate ID</div>
+              <div style="margin-top:4px;font-size:20px;font-weight:900;letter-spacing:0.06em;color:#0f172a;">${escapeHtml(certificateId)}</div>
+
+              <div style="margin-top:18px;padding:14px;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;">
+                <div style="font-size:12px;font-weight:900;color:#64748b;text-transform:uppercase;">Vehicle</div>
+                <div style="margin-top:4px;font-size:18px;font-weight:900;color:#0f172a;">${escapeHtml(vehicleLabel || "Vehicle pending verification")}</div>
+                <div style="margin-top:6px;font-size:13px;color:#475569;">
+                  VIN: ${escapeHtml(intake.vin || valuePayload.detectedVin || valuePayload.vin || "Not detected")}<br />
+                  Mileage: ${escapeHtml(formatMileage(mileage))}
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
+                <div style="padding:12px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0;">
+                  <div style="font-size:12px;font-weight:900;color:#64748b;">Status</div>
+                  <div style="margin-top:3px;font-size:14px;font-weight:800;">Pending verification</div>
+                </div>
+                <div style="padding:12px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0;">
+                  <div style="font-size:12px;font-weight:900;color:#64748b;">Valid for</div>
+                  <div style="margin-top:3px;font-size:14px;font-weight:800;">72 hours</div>
+                </div>
+              </div>
+
+              <div style="margin-top:16px;font-size:14px;color:#334155;">
+                ${escapeHtml(customerName)}, your trade certificate has been created and routed to ${escapeHtml(dealer.name)} for verification.
+              </div>
+
+              <div style="margin-top:16px;padding:12px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px;">
+                Final value may adjust after dealer inspection, title/payoff review, mileage verification, and condition confirmation.
+              </div>
+
+              <div style="margin-top:18px;">
+                <h3 style="margin:0 0 8px;font-size:15px;">Solace summary</h3>
+                <ul style="margin:0;padding-left:18px;color:#334155;font-size:13px;">${summaryLines.length ? summaryLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>No summary recorded.</li>"}</ul>
+              </div>
+
+              <div style="margin-top:18px;">
+                <h3 style="margin:0 0 8px;font-size:15px;">Condition notes</h3>
+                <ul style="margin:0;padding-left:18px;color:#334155;font-size:13px;">${conditionNotes.length ? conditionNotes.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>No condition notes recorded.</li>"}</ul>
+              </div>
+
+              <div style="margin-top:18px;">
+                <h3 style="margin:0 0 8px;font-size:15px;">Dealer review notes</h3>
+                <ul style="margin:0;padding-left:18px;color:#334155;font-size:13px;">${reviewNotes.length ? reviewNotes.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>Verify title, payoff, condition, VIN, mileage, and recall status before final paperwork.</li>"}</ul>
+              </div>
+
+              <div style="margin-top:18px;">
+                <h3 style="margin:0 0 8px;font-size:15px;">Photos</h3>
+                <ul style="margin:0;padding-left:18px;color:#334155;font-size:13px;">${photoLinks || "<li>No photo links available.</li>"}</ul>
+              </div>
+
+              <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">
+                Confidence: ${escapeHtml(confidence)} · State: ${escapeHtml(admissibility)} · Intent: ${escapeHtml(customerIntent || intake.customer_intent || "Not selected")}
+              </div>
+            </div>
           </div>
 
-          <h2 style="margin:8px 0;">${formatMoney(offerAmount)}</h2>
-
-          <p style="color:#334155;">
-            ${escapeHtml(vehicleLabel || "Vehicle")}
-          </p>
-
-          <hr style="margin:16px 0;" />
-
-          <p><strong>Certificate ID:</strong> ${certificateId}</p>
-          <p><strong>Status:</strong> Pending dealer verification</p>
-          <p><strong>Valid for:</strong> 72 hours</p>
-
-          <div style="margin-top:20px;font-size:13px;color:#475569;">
-            This is a preliminary trade offer based on your submission.
+          <div style="margin-top:12px;text-align:center;font-size:12px;color:#64748b;">
+            ${escapeHtml(dealer.name)} · Trade certificate generated by SolaceTrade
           </div>
-
         </div>
       </div>
     `;
 
-    let emailed = false;
+    let emailId: string | null = null;
 
     if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
+      const from = process.env.RESEND_FROM_EMAIL || "SolaceTrade <onboarding@resend.dev>";
 
-      await resend.emails.send({
-        from:
-          process.env.RESEND_FROM_EMAIL ||
-          "SolaceTrade <onboarding@resend.dev>",
-        to: [email, dealer.lead_email],
-        subject: `Your Trade Certificate – ${formatMoney(offerAmount)}`,
+      const { data, error } = await resend.emails.send({
+        from,
+        to: [customerContact, dealer.lead_email],
+        subject,
         html,
       });
 
-      emailed = true;
-    }
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    await supabaseAdmin
-      .schema(SOLACETRADE_SCHEMA)
-      .from("trade_intakes")
-      .update({
-        status: "submitted",
-        customer_intent: customerIntent || intake.customer_intent || null,
-        customer_contact: email,
-        customer_name: customerName,
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", intake.id);
+      emailId = data?.id || null;
+    }
 
     await logTradeEvent({
       dealerId: dealer.id,
       intakeId: intake.id,
       eventType: "certificate_sent",
       payload: {
+        customerIntent,
         certificateId,
-        emailedTo: email,
+        emailedTo: [customerContact, dealer.lead_email],
+        emailId,
+        resendEnabled: Boolean(process.env.RESEND_API_KEY),
       },
     });
 
     return NextResponse.json({
       ok: true,
       intakeId: intake.id,
-      emailed,
+      emailed: Boolean(emailId),
+      emailId,
       certificateId,
+      dealer: {
+        name: dealer.name,
+        leadEmail: dealer.lead_email,
+      },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: "Submit failed." },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unknown submit error.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
