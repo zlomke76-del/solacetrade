@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
-  cleanMileage,
   cleanText,
-  cleanVin,
   getDealerBySlug,
   logTradeEvent,
   SOLACETRADE_SCHEMA,
@@ -44,11 +42,6 @@ export async function POST(
         ? "internal"
         : "customer";
 
-    // Optional at intake time.
-    // Customer flow relies on the value route reading VIN/mileage from images.
-    const vin = cleanVin(formData.get("vin"));
-    const mileage = cleanMileage(formData.get("mileage"));
-
     const customerName = cleanText(formData.get("customerName"), 160);
     const customerContact = cleanText(formData.get("contact"), 180);
     const salesperson = cleanText(formData.get("salesperson"), 160);
@@ -61,29 +54,23 @@ export async function POST(
           entry.file instanceof File && entry.file.size > 0
       );
 
+    const receivedSteps = photoEntries.map((entry) => entry.stepKey);
+    const missingSteps = photoSteps.filter((step) => !receivedSteps.includes(step));
+
     if (photoEntries.length !== photoSteps.length) {
       return NextResponse.json(
         {
-          error:
-            "All five guided vehicle photos are required before intake can be created.",
+          error: "All five guided vehicle photos are required before intake can be created.",
+          receivedSteps,
+          missingSteps,
         },
         { status: 400 }
       );
     }
 
-    if (mode === "customer" && !customerName) {
+    if (!customerName) {
       return NextResponse.json(
         { error: "Customer name is required before creating the offer file." },
-        { status: 400 }
-      );
-    }
-
-    if (mode === "internal" && (!vin || vin.length < 11 || !mileage)) {
-      return NextResponse.json(
-        {
-          error:
-            "Internal mode requires VIN and mileage before routing the manager packet.",
-        },
         { status: 400 }
       );
     }
@@ -98,8 +85,8 @@ export async function POST(
         customer_name: customerName || null,
         customer_contact: customerContact || null,
         salesperson: salesperson || null,
-        vin: vin || null,
-        mileage: mileage || null,
+        vin: null,
+        mileage: null,
         manager_notes: managerNotes || null,
         photo_count: photoEntries.length,
       })
@@ -126,9 +113,7 @@ export async function POST(
         });
 
       if (uploadError) {
-        throw new Error(
-          `Photo upload failed for ${stepKey}: ${uploadError.message}`
-        );
+        throw new Error(`Photo upload failed for ${stepKey}: ${uploadError.message}`);
       }
 
       uploadedPaths.push(storagePath);
@@ -175,8 +160,8 @@ export async function POST(
       payload: {
         photoCount: uploadedPaths.length,
         mode,
-        hasManualVin: Boolean(vin),
-        hasManualMileage: Boolean(mileage),
+        vinSource: "image_evidence_only",
+        mileageSource: "image_evidence_only",
       },
     });
 
@@ -190,9 +175,7 @@ export async function POST(
       photoPaths: uploadedPaths,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown intake error.";
-
+    const message = error instanceof Error ? error.message : "Unknown intake error.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
