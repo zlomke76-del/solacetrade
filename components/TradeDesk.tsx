@@ -73,7 +73,8 @@ const captureSteps: CaptureStep[] = [
     label: "Odometer",
     shortLabel: "Miles",
     help: "Capture the mileage clearly.",
-    coaching: "Turn the vehicle on if needed and avoid glare on the dash display.",
+    coaching:
+      "Turn the vehicle on if needed and avoid glare on the dash display.",
     image: "/images/vehicle_scan_04.png",
   },
   {
@@ -81,7 +82,8 @@ const captureSteps: CaptureStep[] = [
     label: "VIN",
     shortLabel: "VIN",
     help: "Capture the VIN plate or door jamb sticker.",
-    coaching: "Use the windshield VIN plate or driver door jamb label if clearer.",
+    coaching:
+      "Use the windshield VIN plate or driver door jamb label if clearer.",
     image: "/images/vehicle_scan_05.png",
   },
 ];
@@ -105,7 +107,9 @@ function cleanMileage(value: string) {
 function displayMileage(value: string) {
   const cleaned = cleanMileage(value);
   if (!cleaned) return "";
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(cleaned);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+    cleaned,
+  );
 }
 
 function emptyPhotos(): PhotoMap {
@@ -130,7 +134,8 @@ function getValueVin(value: SolaceValue | null) {
 }
 
 function getValueMileage(value: SolaceValue | null) {
-  const raw = value?.detectedMileage ?? value?.mileage ?? value?.vehicle?.mileage ?? "";
+  const raw =
+    value?.detectedMileage ?? value?.mileage ?? value?.vehicle?.mileage ?? "";
   return raw ? String(raw) : "";
 }
 
@@ -161,27 +166,28 @@ export default function TradeDesk({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
-  const capturedCount = Object.values(photos).filter((file) => file instanceof File && file.size > 0).length;
+  const capturedCount = Object.values(photos).filter(Boolean).length;
   const photoProgress = Math.round((capturedCount / captureSteps.length) * 100);
   const scanComplete = capturedCount === captureSteps.length;
   const showDetails = scanComplete;
-  const canRequestOffer = scanComplete && customerName.trim().length > 0;
+  const canRequestOffer = scanComplete;
 
   const missingItems = useMemo(() => {
     const missing: string[] = [];
     captureSteps.forEach((step) => {
-      const file = photos[step.key];
-      if (!(file instanceof File) || file.size <= 0) missing.push(`${step.shortLabel} photo`);
+      if (!photos[step.key]) missing.push(`${step.shortLabel} photo`);
     });
-    if (scanComplete && !customerName.trim()) missing.push("name");
-    return missing;
-  }, [scanComplete, customerName, photos]);
 
-  const nextMissingPhoto = captureSteps.find((step) => {
-    const file = photos[step.key];
-    return !(file instanceof File) || file.size <= 0;
-  });
-  const nextMissing = scanComplete ? missingItems[0] : `${nextMissingPhoto?.shortLabel || "next"} photo`;
+    if (!scanComplete) return missing;
+
+    return missing;
+  }, [scanComplete, photos]);
+
+  const nextMissingPhoto = captureSteps.find((step) => !photos[step.key]);
+  const nextMissing = scanComplete
+    ? missingItems[0]
+    : `${nextMissingPhoto?.shortLabel || "next"} photo`;
+
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
 
@@ -214,12 +220,9 @@ export default function TradeDesk({
     setStatusMessage("");
 
     if (!scanComplete) {
-      setErrorMessage(`Finish the five guided photos first. Next needed: ${nextMissing}.`);
-      return;
-    }
-
-    if (!customerName.trim()) {
-      setErrorMessage("Enter your name so Solace can prepare the offer file.");
+      setErrorMessage(
+        `Finish the five guided photos first. Next needed: ${nextMissing}.`,
+      );
       return;
     }
 
@@ -228,6 +231,8 @@ export default function TradeDesk({
     try {
       const formData = new FormData();
       formData.append("mode", mode);
+      formData.append("vin", vin);
+      formData.append("mileage", mileage);
       formData.append("contact", contact);
       formData.append("customerName", customerName);
       formData.append("salesperson", salesperson);
@@ -235,16 +240,17 @@ export default function TradeDesk({
 
       for (const step of captureSteps) {
         const file = photos[step.key];
-        if (file instanceof File && file.size > 0) {
-          formData.append(step.key, file, file.name || `${step.key}.jpg`);
-        }
+        if (file) formData.append(step.key, file);
       }
 
       setStatusMessage("Saving vehicle scan...");
-      const intakeResponse = await fetch(`/api/solacetrade/${dealerSlug}/intake`, {
-        method: "POST",
-        body: formData,
-      });
+      const intakeResponse = await fetch(
+        `/api/solacetrade/${dealerSlug}/intake`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       const intakeJson = await intakeResponse.json();
       if (!intakeResponse.ok) {
@@ -252,13 +258,18 @@ export default function TradeDesk({
       }
 
       setIntakeId(intakeJson.intakeId);
-      setStatusMessage("Solace is reading the scan and producing the instant cash offer...");
+      setStatusMessage(
+        "Solace is reading the scan and producing the instant cash offer...",
+      );
 
-      const valueResponse = await fetch(`/api/solacetrade/${dealerSlug}/value`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intakeId: intakeJson.intakeId }),
-      });
+      const valueResponse = await fetch(
+        `/api/solacetrade/${dealerSlug}/value`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intakeId: intakeJson.intakeId }),
+        },
+      );
 
       const valueJson = await valueResponse.json();
       if (!valueResponse.ok) {
@@ -269,12 +280,15 @@ export default function TradeDesk({
       const nextVin = getValueVin(nextValue);
       const nextMileage = getValueMileage(nextValue);
 
-      setVin(nextVin ? nextVin.toUpperCase() : "");
-      setMileage(nextMileage || "");
+      if (nextVin && !vin.trim()) setVin(nextVin.toUpperCase());
+      if (nextMileage && !mileage.trim()) setMileage(nextMileage);
+
       setValue(nextValue);
       setStatusMessage("Instant cash offer ready.");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong.",
+      );
       setStatusMessage("");
     } finally {
       setSubmitting(false);
@@ -286,7 +300,16 @@ export default function TradeDesk({
     setStatusMessage("");
 
     if (!intakeId) {
-      setErrorMessage("Create the instant cash offer before sending the vehicle file.");
+      setErrorMessage(
+        "Create the instant cash offer before sending the vehicle file.",
+      );
+      return;
+    }
+
+    if (!isInternal && (!customerName.trim() || !contact.trim())) {
+      setErrorMessage(
+        "Enter your name and phone or email so the dealer can follow up on the offer.",
+      );
       return;
     }
 
@@ -307,15 +330,18 @@ export default function TradeDesk({
       });
 
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error || "Could not send vehicle file.");
+      if (!response.ok)
+        throw new Error(json.error || "Could not send vehicle file.");
 
       setStatusMessage(
         json.emailed
           ? `Vehicle file sent to ${json.dealer.name}.`
-          : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active."
+          : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active.",
       );
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -361,11 +387,19 @@ export default function TradeDesk({
       <div
         style={{
           padding: "16px 16px 13px",
-          background: "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,41,59,0.96))",
+          background:
+            "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,41,59,0.96))",
           color: "white",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "center",
+          }}
+        >
           <div
             style={{
               display: "inline-flex",
@@ -391,7 +425,9 @@ export default function TradeDesk({
             />
             {isInternal ? "Manager Packet" : "Guided Vehicle Scan"}
           </div>
-          <strong style={{ fontSize: 12, opacity: 0.86 }}>{capturedCount}/5 photos</strong>
+          <strong style={{ fontSize: 12, opacity: 0.86 }}>
+            {capturedCount}/5 photos
+          </strong>
         </div>
 
         <h2
@@ -404,10 +440,17 @@ export default function TradeDesk({
         >
           {started ? currentStep.label : "Capture the vehicle first."}
         </h2>
-        <p style={{ margin: 0, color: "rgba(255,255,255,0.76)", fontSize: 14, lineHeight: 1.42 }}>
+        <p
+          style={{
+            margin: 0,
+            color: "rgba(255,255,255,0.76)",
+            fontSize: 14,
+            lineHeight: 1.42,
+          }}
+        >
           {started
             ? currentStep.coaching
-            : "Five guided photos first. Solace reads VIN and mileage from image evidence."}
+            : "Five guided photos first. Solace reads the VIN and mileage from the scan."}
         </p>
 
         <div
@@ -464,7 +507,8 @@ export default function TradeDesk({
             style={{
               position: "absolute",
               inset: 0,
-              background: "linear-gradient(180deg, rgba(2,6,23,0.48), rgba(2,6,23,0.04) 44%, rgba(2,6,23,0.72))",
+              background:
+                "linear-gradient(180deg, rgba(2,6,23,0.48), rgba(2,6,23,0.04) 44%, rgba(2,6,23,0.72))",
             }}
           />
           <div
@@ -496,9 +540,26 @@ export default function TradeDesk({
           >
             +
           </div>
-          <div style={{ position: "absolute", left: 15, right: 15, bottom: 13, color: "white" }}>
-            <strong style={{ display: "block", fontSize: 16 }}>{currentStep.help}</strong>
-            <span style={{ display: "block", marginTop: 4, fontSize: 12, opacity: 0.84 }}>
+          <div
+            style={{
+              position: "absolute",
+              left: 15,
+              right: 15,
+              bottom: 13,
+              color: "white",
+            }}
+          >
+            <strong style={{ display: "block", fontSize: 16 }}>
+              {currentStep.help}
+            </strong>
+            <span
+              style={{
+                display: "block",
+                marginTop: 4,
+                fontSize: 12,
+                opacity: 0.84,
+              }}
+            >
               Tap to capture or upload this view.
             </span>
           </div>
@@ -514,7 +575,7 @@ export default function TradeDesk({
         >
           {captureSteps.map((step, index) => {
             const active = stepIndex === index;
-            const done = photos[step.key] instanceof File && (photos[step.key]?.size || 0) > 0;
+            const done = Boolean(photos[step.key]);
             return (
               <button
                 key={step.key}
@@ -526,7 +587,9 @@ export default function TradeDesk({
                 style={{
                   minHeight: 40,
                   borderRadius: 13,
-                  border: active ? `2px solid ${isInternal ? "#0284c7" : red}` : "1px solid #e2e8f0",
+                  border: active
+                    ? `2px solid ${isInternal ? "#0284c7" : red}`
+                    : "1px solid #e2e8f0",
                   background: done ? "#ecfdf5" : "white",
                   color: done ? "#047857" : dark,
                   fontSize: 11,
@@ -543,7 +606,14 @@ export default function TradeDesk({
       </div>
 
       <div style={{ padding: "0 14px 16px" }}>
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 21, padding: 14, background: "#f8fafc" }}>
+        <div
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 21,
+            padding: 14,
+            background: "#f8fafc",
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -555,11 +625,20 @@ export default function TradeDesk({
           >
             <div>
               <h3 style={{ margin: 0, fontSize: 18 }}>
-                {showDetails ? "Tell us where to send the offer" : "Finish the photo sequence"}
-              </h3>
-              <p style={{ margin: "4px 0 0", color: muted, fontSize: 13, lineHeight: 1.35 }}>
                 {showDetails
-                  ? "VIN and mileage are read from the scan evidence. You only enter identity and contact."
+                  ? "Ready for Solace scan review"
+                  : "Finish the photo sequence"}
+              </h3>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  color: muted,
+                  fontSize: 13,
+                  lineHeight: 1.35,
+                }}
+              >
+                {showDetails
+                  ? "Solace will read the VIN and mileage from the photo evidence before asking what you want to do next."
                   : nextMissing
                     ? `Next needed: ${nextMissing}.`
                     : "Keep going."}
@@ -574,34 +653,13 @@ export default function TradeDesk({
                 fontSize: 13,
               }}
             >
-              {canRequestOffer ? "Ready" : showDetails ? `${missingItems.length} left` : `${captureSteps.length - capturedCount} left`}
+              {canRequestOffer
+                ? "Ready"
+                : showDetails
+                  ? `${missingItems.length} left`
+                  : `${captureSteps.length - capturedCount} left`}
             </div>
           </div>
-
-          {showDetails && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 9 }}>
-              {isInternal && (
-                <input
-                  placeholder="Salesperson"
-                  value={salesperson}
-                  onChange={(event) => setSalesperson(event.target.value)}
-                  style={inputStyle()}
-                />
-              )}
-              <input
-                placeholder={isInternal ? "Customer" : "Name"}
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-                style={inputStyle()}
-              />
-              <input
-                placeholder="Phone or email"
-                value={contact}
-                onChange={(event) => setContact(event.target.value)}
-                style={inputStyle()}
-              />
-            </div>
-          )}
 
           {showDetails && (
             <div
@@ -613,24 +671,52 @@ export default function TradeDesk({
                 border: "1px solid #e2e8f0",
               }}
             >
-              <strong style={{ display: "block", fontSize: 13, color: dark }}>
-                Vehicle details from scan evidence
-              </strong>
-              <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
-                VIN and mileage are read from the uploaded VIN and odometer photos. They cannot be manually entered.
-              </p>
+              <div>
+                <strong style={{ display: "block", fontSize: 13, color: dark }}>
+                  Vehicle details from scan evidence
+                </strong>
+                <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
+                  VIN and mileage are read from the uploaded VIN and odometer
+                  photos. They cannot be manually entered.
+                </p>
+              </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 10 }}>
-                <div style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 13 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: 8,
+                  marginTop: 10,
+                }}
+              >
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 13,
+                    background: "#f8fafc",
+                    fontSize: 13,
+                  }}
+                >
                   <strong>VIN</strong>
                   <br />
-                  <span style={{ color: detectedVin ? dark : muted }}>{detectedVin || "Will be detected from scan"}</span>
+                  <span style={{ color: detectedVin ? dark : muted }}>
+                    {detectedVin || "Will be detected from scan"}
+                  </span>
                 </div>
-                <div style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 13 }}>
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 13,
+                    background: "#f8fafc",
+                    fontSize: 13,
+                  }}
+                >
                   <strong>Mileage</strong>
                   <br />
                   <span style={{ color: detectedMileage ? dark : muted }}>
-                    {detectedMileage ? displayMileage(detectedMileage) || detectedMileage : "Will be detected from scan"}
+                    {detectedMileage
+                      ? displayMileage(detectedMileage) || detectedMileage
+                      : "Will be detected from scan"}
                   </span>
                 </div>
               </div>
@@ -649,7 +735,7 @@ export default function TradeDesk({
 
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || !canRequestOffer}
             onClick={createIntakeAndValue}
             style={{
               width: "100%",
@@ -661,18 +747,22 @@ export default function TradeDesk({
               color: "white",
               fontSize: 15,
               fontWeight: 900,
-              cursor: submitting ? "wait" : "pointer",
-              opacity: submitting ? 0.72 : 1,
-              boxShadow: isInternal ? "0 16px 32px rgba(15,23,42,0.18)" : "0 16px 32px rgba(185,28,28,0.22)",
+              cursor: submitting
+                ? "wait"
+                : !canRequestOffer
+                  ? "not-allowed"
+                  : "pointer",
+              opacity: submitting ? 0.72 : !canRequestOffer ? 0.62 : 1,
+              boxShadow: isInternal
+                ? "0 16px 32px rgba(15,23,42,0.18)"
+                : "0 16px 32px rgba(185,28,28,0.22)",
             }}
           >
             {submitting
               ? "Working..."
               : canRequestOffer
                 ? "Get My Instant Cash Offer"
-                : showDetails
-                  ? "Enter Name to Continue"
-                  : "Continue Photo Scan"}
+                : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
           </button>
         </div>
 
@@ -718,7 +808,14 @@ export default function TradeDesk({
                 marginBottom: 10,
               }}
             >
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: red }} />
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
+                  background: red,
+                }}
+              />
               Solace Response
             </div>
 
@@ -730,21 +827,50 @@ export default function TradeDesk({
                 lineHeight: 1.05,
               }}
             >
-              {value.title || `Instant cash offer: ${formatMoney(value.offerAmount)}`}
+              {value.title ||
+                `Instant cash offer: ${formatMoney(value.offerAmount)}`}
             </strong>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              <span
+                style={{
+                  padding: 10,
+                  borderRadius: 13,
+                  background: "#f8fafc",
+                  fontSize: 12,
+                }}
+              >
                 <strong>Offer</strong>
                 <br />
                 {formatMoney(value.offerAmount)}
               </span>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}>
+              <span
+                style={{
+                  padding: 10,
+                  borderRadius: 13,
+                  background: "#f8fafc",
+                  fontSize: 12,
+                }}
+              >
                 <strong>State</strong>
                 <br />
                 {value.admissibility}
               </span>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}>
+              <span
+                style={{
+                  padding: 10,
+                  borderRadius: 13,
+                  background: "#f8fafc",
+                  fontSize: 12,
+                }}
+              >
                 <strong>Photos</strong>
                 <br />
                 {capturedCount}/5
@@ -752,20 +878,78 @@ export default function TradeDesk({
             </div>
 
             {(value.summaryLines || []).map((line) => (
-              <p key={line} style={{ margin: "10px 0 0", color: "#334155", fontSize: 13, lineHeight: 1.45 }}>
+              <p
+                key={line}
+                style={{
+                  margin: "10px 0 0",
+                  color: "#334155",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
                 {line}
               </p>
             ))}
 
-            {(value.missingItems || []).length > 0 && (
-              <div style={{ marginTop: 12, padding: 12, borderRadius: 16, background: "#fff7ed", color: "#9a3412", fontSize: 13, fontWeight: 800 }}>
-                {value.missingItems.join(" · ")}
+            {!isInternal && (
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 12,
+                  borderRadius: 18,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <strong
+                  style={{ display: "block", fontSize: 15, marginBottom: 9 }}
+                >
+                  Where should we send your offer?
+                </strong>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: 9,
+                  }}
+                >
+                  <input
+                    placeholder="Name"
+                    value={customerName}
+                    onChange={(event) => setCustomerName(event.target.value)}
+                    style={inputStyle()}
+                  />
+                  <input
+                    placeholder="Phone or email"
+                    value={contact}
+                    onChange={(event) => setContact(event.target.value)}
+                    style={inputStyle()}
+                  />
+                </div>
               </div>
             )}
 
-            <div style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>What would you like to do next?</strong>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+            <div
+              style={{
+                marginTop: 14,
+                padding: 12,
+                borderRadius: 18,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <strong
+                style={{ display: "block", fontSize: 15, marginBottom: 9 }}
+              >
+                What would you like to do next?
+              </strong>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 8,
+                }}
+              >
                 {[
                   ["trade", "Trade it"],
                   ["sell", "Sell it"],
@@ -778,8 +962,12 @@ export default function TradeDesk({
                     style={{
                       padding: "11px 8px",
                       borderRadius: 14,
-                      border: customerIntent === intentValue ? `2px solid ${red}` : "1px solid #cbd5e1",
-                      background: customerIntent === intentValue ? "#fee2e2" : "white",
+                      border:
+                        customerIntent === intentValue
+                          ? `2px solid ${red}`
+                          : "1px solid #cbd5e1",
+                      background:
+                        customerIntent === intentValue ? "#fee2e2" : "white",
                       color: customerIntent === intentValue ? "#991b1b" : dark,
                       fontSize: 12,
                       fontWeight: 900,
@@ -791,6 +979,15 @@ export default function TradeDesk({
                 ))}
               </div>
             </div>
+
+            {isInternal && (
+              <input
+                placeholder="Manager email or routing contact"
+                value={contact}
+                onChange={(event) => setContact(event.target.value)}
+                style={{ ...inputStyle(), marginTop: 12 }}
+              />
+            )}
 
             <button
               type="button"
@@ -810,7 +1007,11 @@ export default function TradeDesk({
                 opacity: submitting ? 0.72 : 1,
               }}
             >
-              {isInternal ? "Route to Used Car Manager" : customerIntent ? "Send My Vehicle File" : `Send to ${dealerName}`}
+              {isInternal
+                ? "Route to Used Car Manager"
+                : customerIntent
+                  ? "Send My Vehicle File"
+                  : `Send to ${dealerName}`}
             </button>
             <button
               type="button"
