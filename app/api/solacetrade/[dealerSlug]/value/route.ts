@@ -29,6 +29,13 @@ type TradeIntake = {
   photo_paths: string[] | null;
 };
 
+type DecodedVehicle = {
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  trim: string | null;
+};
+
 const gatewayUrl = "https://ai-gateway.vercel.sh/v1/chat/completions";
 
 function getGatewayKey() {
@@ -79,6 +86,57 @@ function findSignedUrl(
     signedPhotos.find((photo) => photo.path.includes(`/${stepKey}.`))
       ?.signedUrl || null
   );
+}
+
+function cleanVehicleText(value: unknown) {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value).trim();
+  if (!text || text.toLowerCase() === "not applicable") return null;
+
+  return text;
+}
+
+async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null> {
+  const clean = cleanVin(vin);
+
+  if (!clean || clean.length !== 17) return null;
+
+  try {
+    const response = await fetch(
+      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${clean}?format=json`,
+      { cache: "no-store" }
+    );
+
+    if (!response.ok) return null;
+
+    const json = (await response.json().catch(() => ({}))) as {
+      Results?: Array<Record<string, unknown>>;
+    };
+
+    const result = json.Results?.[0];
+    if (!result) return null;
+
+    const yearText = cleanVehicleText(result.ModelYear);
+    const year = yearText ? Number(yearText) : null;
+
+    return {
+      year: Number.isFinite(year) ? year : null,
+      make: cleanVehicleText(result.Make),
+      model: cleanVehicleText(result.Model),
+      trim:
+        cleanVehicleText(result.Trim) ||
+        cleanVehicleText(result.Series) ||
+        cleanVehicleText(result.Series2),
+    };
+  } catch (error) {
+    console.error("SolaceTrade VIN decode failed", {
+      vin: clean,
+      error: error instanceof Error ? error.message : "Unknown VIN decode error",
+    });
+
+    return null;
+  }
 }
 
 export async function POST(
@@ -189,16 +247,25 @@ Return ONLY valid JSON with this exact shape:
   "dealerReviewNotes": string[],
   "detectedVin": string | null,
   "detectedMileage": number | null,
+  "vehicleYear": number | null,
+  "vehicleMake": string | null,
+  "vehicleModel": string | null,
+  "vehicleTrim": string | null,
   "vehicle": {
     "vin": string | null,
-    "mileage": number | null
+    "mileage": number | null,
+    "year": number | null,
+    "make": string | null,
+    "model": string | null,
+    "trim": string | null
   }
 }
 
 Rules:
 - If VIN is not visible, detectedVin must be null.
 - If mileage is not visible, detectedMileage must be null.
-- Do not invent VIN or mileage.
+- If year, make, model, or trim are not visible from the image evidence, set them to null. The server will decode those fields from the detected VIN when possible.
+- Do not invent VIN, mileage, year, make, model, or trim.
 - If VIN or mileage cannot be read, admissibility should be PARTIAL.
 - Keep summaryLines customer-friendly.
 - Keep dealerReviewNotes operational and concise.
@@ -310,15 +377,44 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           intake.mileage
       ) || null;
 
+    const decodedVehicle = detectedVin
+      ? await decodeVehicleFromVin(detectedVin)
+      : null;
+
+    const vehicleYear =
+      decodedVehicle?.year ||
+      cleanVehicleText(parsed.vehicleYear || parsed.year || parsed.vehicle?.year);
+    const vehicleMake =
+      decodedVehicle?.make ||
+      cleanVehicleText(parsed.vehicleMake || parsed.make || parsed.vehicle?.make);
+    const vehicleModel =
+      decodedVehicle?.model ||
+      cleanVehicleText(parsed.vehicleModel || parsed.model || parsed.vehicle?.model);
+    const vehicleTrim =
+      decodedVehicle?.trim ||
+      cleanVehicleText(parsed.vehicleTrim || parsed.trim || parsed.vehicle?.trim);
+
     const valuePayload = {
       ...parsed,
       detectedVin: detectedVin || null,
       detectedMileage,
       vin: detectedVin || null,
       mileage: detectedMileage,
+      vehicleYear,
+      vehicleMake,
+      vehicleModel,
+      vehicleTrim,
+      year: vehicleYear,
+      make: vehicleMake,
+      model: vehicleModel,
+      trim: vehicleTrim,
       vehicle: {
         vin: detectedVin || null,
         mileage: detectedMileage,
+        year: vehicleYear,
+        make: vehicleMake,
+        model: vehicleModel,
+        trim: vehicleTrim,
       },
       title:
         parsed.title ||
@@ -356,6 +452,12 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         model: getModel(),
         hasDetectedVin: Boolean(detectedVin),
         hasDetectedMileage: Boolean(detectedMileage),
+        decodedVehicle: {
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+        },
         offerAmount: valuePayload.offerAmount,
         confidence: valuePayload.confidence,
         admissibility: valuePayload.admissibility,
