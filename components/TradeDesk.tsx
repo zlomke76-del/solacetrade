@@ -37,9 +37,21 @@ type SolaceValue = {
   detectedMileage?: string | number | null;
   vin?: string | null;
   mileage?: string | number | null;
+  vehicleYear?: string | number | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleTrim?: string | null;
+  year?: string | number | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
   vehicle?: {
     vin?: string | null;
     mileage?: string | number | null;
+    year?: string | number | null;
+    make?: string | null;
+    model?: string | null;
+    trim?: string | null;
   } | null;
 };
 
@@ -154,6 +166,29 @@ function getValueMileage(value: SolaceValue | null) {
   return raw ? String(raw) : "";
 }
 
+function cleanVehiclePart(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function getValueVehicle(value: SolaceValue | null) {
+  const year = cleanVehiclePart(value?.vehicleYear ?? value?.year ?? value?.vehicle?.year);
+  const make = cleanVehiclePart(value?.vehicleMake ?? value?.make ?? value?.vehicle?.make);
+  const model = cleanVehiclePart(value?.vehicleModel ?? value?.model ?? value?.vehicle?.model);
+  const trim = cleanVehiclePart(value?.vehicleTrim ?? value?.trim ?? value?.vehicle?.trim);
+
+  return { year, make, model, trim };
+}
+
+function getValueVehicleLabel(value: SolaceValue | null) {
+  const vehicle = getValueVehicle(value);
+  return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/s+/g, " ")
+    .trim();
+}
+
 function hasContact(value: string) {
   return value.trim().length >= 7;
 }
@@ -207,6 +242,8 @@ export default function TradeDesk({
   const showDetails = scanComplete;
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
+  const detectedVehicle = getValueVehicle(value);
+  const detectedVehicleLabel = getValueVehicleLabel(value);
   const canRequestOffer = scanComplete && !value;
   const canSubmitVehicleFile =
     Boolean(value) &&
@@ -770,6 +807,20 @@ export default function TradeDesk({
                       : "Will be detected from scan"}
                   </span>
                 </div>
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 13,
+                    background: "#f8fafc",
+                    fontSize: 13,
+                  }}
+                >
+                  <strong>Vehicle</strong>
+                  <br />
+                  <span style={{ color: detectedVehicleLabel ? dark : muted }}>
+                    {detectedVehicleLabel || "Will be decoded after VIN scan"}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -946,6 +997,32 @@ export default function TradeDesk({
                 {capturedCount}/5
               </span>
             </div>
+
+            {detectedVehicleLabel && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 16,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  fontSize: 13,
+                }}
+              >
+                <strong style={{ display: "block", marginBottom: 6 }}>
+                  Vehicle decoded from VIN
+                </strong>
+                <div style={{ color: dark, fontWeight: 900 }}>
+                  {detectedVehicleLabel}
+                </div>
+                <div style={{ marginTop: 7, color: muted, lineHeight: 1.45 }}>
+                  Year: {detectedVehicle.year || "Pending"} · Make:{" "}
+                  {detectedVehicle.make || "Pending"} · Model:{" "}
+                  {detectedVehicle.model || "Pending"}
+                  {detectedVehicle.trim ? ` · Trim: ${detectedVehicle.trim}` : ""}
+                </div>
+              </div>
+            )}
 
             {(value.summaryLines || []).map((line) => (
               <p
