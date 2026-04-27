@@ -759,7 +759,7 @@ export default function TradeDesk({
 
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || !canRequestOffer}
             onClick={createIntakeAndValue}
             style={{
               width: "100%",
@@ -771,8 +771,8 @@ export default function TradeDesk({
               color: "white",
               fontSize: 15,
               fontWeight: 900,
-              cursor: submitting ? "wait" : "pointer",
-              opacity: submitting ? 0.72 : 1,
+              cursor: submitting ? "wait" : !canRequestOffer ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.72 : !canRequestOffer ? 0.62 : 1,
               boxShadow: isInternal
                 ? "0 16px 32px rgba(15,23,42,0.18)"
                 : "0 16px 32px rgba(185,28,28,0.22)",
@@ -783,8 +783,10 @@ export default function TradeDesk({
               : canRequestOffer
                 ? "Get My Instant Cash Offer"
                 : showDetails
-                  ? "Continue to Offer"
-                  : "Continue Photo Scan"}
+                  ? isInternal
+                    ? "Add VIN and Mileage"
+                    : "Enter Name to Continue"
+                  : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
           </button>
         </div>
 
