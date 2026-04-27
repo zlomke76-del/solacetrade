@@ -27,10 +27,10 @@ export default function Page() {
 
       <header
         style={{
-          background: "rgba(255,255,255,0.92)",
+          background: "rgba(255,255,255,0.94)",
           backdropFilter: "blur(14px)",
           borderBottom: "1px solid #e5e7eb",
-          padding: "13px 18px",
+          padding: "12px 18px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -52,12 +52,12 @@ export default function Page() {
         style={{
           position: "relative",
           overflow: "hidden",
-          padding: "44px 18px 24px",
+          padding: "34px 18px 16px",
           background:
             "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.13), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%)",
         }}
       >
-        <div style={{ maxWidth: 1120, margin: "0 auto", textAlign: "center" }}>
+        <div style={{ maxWidth: 1040, margin: "0 auto", textAlign: "center" }}>
           <div
             style={{
               display: "inline-flex",
@@ -71,7 +71,7 @@ export default function Page() {
               fontWeight: 900,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              marginBottom: 14,
+              marginBottom: 12,
             }}
           >
             TradeDesk by Solace
@@ -79,26 +79,26 @@ export default function Page() {
 
           <h1
             style={{
-              margin: "0 auto 10px",
-              maxWidth: 840,
-              fontSize: "clamp(38px, 7vw, 72px)",
-              lineHeight: 0.92,
-              letterSpacing: "-0.06em",
+              margin: "0 auto 9px",
+              maxWidth: 780,
+              fontSize: "clamp(34px, 6vw, 62px)",
+              lineHeight: 0.95,
+              letterSpacing: "-0.058em",
             }}
           >
-            A cleaner way to value your trade.
+            Scan first. Get a cleaner trade value.
           </h1>
 
           <p
             style={{
-              margin: "0 auto 18px",
-              maxWidth: 680,
+              margin: "0 auto 16px",
+              maxWidth: 620,
               color: "#475569",
-              fontSize: "clamp(16px, 2vw, 20px)",
-              lineHeight: 1.45,
+              fontSize: "clamp(15px, 2vw, 18px)",
+              lineHeight: 1.42,
             }}
           >
-            Take five guided photos, add your VIN and mileage, and send a stronger vehicle file to Brenham CDJR.
+            Take five guided photos. Then Solace produces a preliminary value and asks what you want to do next.
           </p>
 
           <a
@@ -107,11 +107,11 @@ export default function Page() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              padding: "15px 22px",
+              padding: "14px 21px",
               borderRadius: 16,
               background: "#b91c1c",
               color: "white",
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: 900,
               textDecoration: "none",
               boxShadow: "0 18px 42px rgba(185,28,28,0.24)",
@@ -126,27 +126,27 @@ export default function Page() {
               flexWrap: "wrap",
               justifyContent: "center",
               gap: 8,
-              marginTop: 16,
+              marginTop: 14,
               color: "#334155",
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 800,
             }}
           >
-            <span style={{ padding: "8px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>5 guided photos</span>
-            <span style={{ padding: "8px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>No appointment needed</span>
-            <span style={{ padding: "8px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>Recall-ready VIN check</span>
+            <span style={{ padding: "7px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>5 guided photos</span>
+            <span style={{ padding: "7px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>VIN after scan</span>
+            <span style={{ padding: "7px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>Recall-ready review</span>
           </div>
         </div>
       </section>
 
-      <section id="vehicle-scan" style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px 36px" }}>
+      <section id="vehicle-scan" style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}>
         <TradeDesk mode="customer" />
       </section>
 
-      <section style={{ padding: "28px 18px 42px" }}>
+      <section style={{ padding: "24px 18px 38px" }}>
         <div
           style={{
-            maxWidth: 940,
+            maxWidth: 900,
             margin: "0 auto",
             display: "grid",
             gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -154,11 +154,11 @@ export default function Page() {
           }}
         >
           {[
-            ["Guided capture", "The app tells the customer exactly which view to capture next."],
-            ["Cleaner packet", "Photos, VIN, mileage, condition, and intent stay together."],
-            ["Dealer-ready", "Designed to reduce back-and-forth before the used car manager reviews."],
+            ["Guided capture", "The customer sees one clear photo task at a time."],
+            ["Cleaner value", "VIN and mileage are requested only after the images are complete."],
+            ["Dealer-ready", "Solace produces the value response before asking the customer’s intent."],
           ].map(([title, body]) => (
-            <div key={title} style={{ padding: 18, borderRadius: 22, background: "white", border: "1px solid #e2e8f0", boxShadow: "0 14px 36px rgba(15,23,42,0.06)" }}>
+            <div key={title} style={{ padding: 17, borderRadius: 21, background: "white", border: "1px solid #e2e8f0", boxShadow: "0 14px 36px rgba(15,23,42,0.06)" }}>
               <strong style={{ display: "block", fontSize: 16 }}>{title}</strong>
               <p style={{ margin: "7px 0 0", color: "#64748b", fontSize: 14, lineHeight: 1.45 }}>{body}</p>
             </div>
