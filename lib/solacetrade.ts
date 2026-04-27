@@ -29,6 +29,14 @@ export type SolaceValuePayload = {
   conditionNotes: string[];
   missingItems: string[];
   dealerReviewNotes: string[];
+  detectedVin?: string | null;
+  detectedMileage?: string | number | null;
+  vin?: string | null;
+  mileage?: string | number | null;
+  vehicle?: {
+    vin?: string | null;
+    mileage?: string | number | null;
+  } | null;
 };
 
 export function normalizeDealerSlug(value: string) {
@@ -36,7 +44,11 @@ export function normalizeDealerSlug(value: string) {
 }
 
 export function cleanVin(value: unknown) {
-  return String(value || "").trim().toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "").slice(0, 17);
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-HJ-NPR-Z0-9]/g, "")
+    .slice(0, 17);
 }
 
 export function cleanMileage(value: unknown) {
@@ -50,6 +62,7 @@ export function cleanText(value: unknown, maxLength = 500) {
 
 export function formatMoney(value: number | null | undefined) {
   if (!value || !Number.isFinite(value)) return "Pending manager review";
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -57,18 +70,26 @@ export function formatMoney(value: number | null | undefined) {
   }).format(value);
 }
 
-export async function getDealerBySlug(dealerSlug: string): Promise<DealerRecord> {
+export async function getDealerBySlug(
+  dealerSlug: string
+): Promise<DealerRecord> {
   const slug = normalizeDealerSlug(dealerSlug);
 
   const { data, error } = await supabaseAdmin
     .schema(SOLACETRADE_SCHEMA)
     .from("dealers")
-    .select("*")
+    .select(
+      "id, slug, name, legal_name, sales_phone, lead_email, address_line, city, state, postal_code, brand_color, is_active"
+    )
     .eq("slug", slug)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
+  if (error) {
+    throw new Error(`Dealer lookup failed: ${error.message}`);
+  }
+
+  if (!data) {
     throw new Error(`Dealer not found or inactive: ${slug}`);
   }
 
@@ -95,17 +116,77 @@ export async function createSignedPhotoUrls(photoPaths: string[]) {
 export function parseSolaceValue(rawText: string): SolaceValuePayload {
   try {
     const parsed = JSON.parse(rawText) as Partial<SolaceValuePayload>;
+
+    const detectedVin =
+      typeof parsed.detectedVin === "string"
+        ? cleanVin(parsed.detectedVin)
+        : typeof parsed.vin === "string"
+          ? cleanVin(parsed.vin)
+          : typeof parsed.vehicle?.vin === "string"
+            ? cleanVin(parsed.vehicle.vin)
+            : null;
+
+    const detectedMileage =
+      cleanMileage(parsed.detectedMileage) ||
+      cleanMileage(parsed.mileage) ||
+      cleanMileage(parsed.vehicle?.mileage);
+
     return {
-      offerAmount: typeof parsed.offerAmount === "number" ? parsed.offerAmount : null,
-      offerRangeLow: typeof parsed.offerRangeLow === "number" ? parsed.offerRangeLow : null,
-      offerRangeHigh: typeof parsed.offerRangeHigh === "number" ? parsed.offerRangeHigh : null,
-      title: cleanText(parsed.title, 160) || "Instant cash offer ready for dealer review.",
-      confidence: parsed.confidence === "High" || parsed.confidence === "Medium" || parsed.confidence === "Low" ? parsed.confidence : "Medium",
-      admissibility: parsed.admissibility === "PASS" || parsed.admissibility === "PARTIAL" || parsed.admissibility === "DENY" ? parsed.admissibility : "PARTIAL",
-      summaryLines: Array.isArray(parsed.summaryLines) ? parsed.summaryLines.map((line) => cleanText(line, 220)).filter(Boolean).slice(0, 4) : [],
-      conditionNotes: Array.isArray(parsed.conditionNotes) ? parsed.conditionNotes.map((line) => cleanText(line, 220)).filter(Boolean).slice(0, 6) : [],
-      missingItems: Array.isArray(parsed.missingItems) ? parsed.missingItems.map((line) => cleanText(line, 160)).filter(Boolean).slice(0, 6) : [],
-      dealerReviewNotes: Array.isArray(parsed.dealerReviewNotes) ? parsed.dealerReviewNotes.map((line) => cleanText(line, 220)).filter(Boolean).slice(0, 6) : [],
+      offerAmount:
+        typeof parsed.offerAmount === "number" ? parsed.offerAmount : null,
+      offerRangeLow:
+        typeof parsed.offerRangeLow === "number" ? parsed.offerRangeLow : null,
+      offerRangeHigh:
+        typeof parsed.offerRangeHigh === "number"
+          ? parsed.offerRangeHigh
+          : null,
+      title:
+        cleanText(parsed.title, 160) ||
+        "Instant cash offer ready for dealer review.",
+      confidence:
+        parsed.confidence === "High" ||
+        parsed.confidence === "Medium" ||
+        parsed.confidence === "Low"
+          ? parsed.confidence
+          : "Medium",
+      admissibility:
+        parsed.admissibility === "PASS" ||
+        parsed.admissibility === "PARTIAL" ||
+        parsed.admissibility === "DENY"
+          ? parsed.admissibility
+          : "PARTIAL",
+      summaryLines: Array.isArray(parsed.summaryLines)
+        ? parsed.summaryLines
+            .map((line) => cleanText(line, 220))
+            .filter(Boolean)
+            .slice(0, 4)
+        : [],
+      conditionNotes: Array.isArray(parsed.conditionNotes)
+        ? parsed.conditionNotes
+            .map((line) => cleanText(line, 220))
+            .filter(Boolean)
+            .slice(0, 6)
+        : [],
+      missingItems: Array.isArray(parsed.missingItems)
+        ? parsed.missingItems
+            .map((line) => cleanText(line, 160))
+            .filter(Boolean)
+            .slice(0, 6)
+        : [],
+      dealerReviewNotes: Array.isArray(parsed.dealerReviewNotes)
+        ? parsed.dealerReviewNotes
+            .map((line) => cleanText(line, 220))
+            .filter(Boolean)
+            .slice(0, 6)
+        : [],
+      detectedVin: detectedVin || null,
+      detectedMileage: detectedMileage || null,
+      vin: detectedVin || null,
+      mileage: detectedMileage || null,
+      vehicle: {
+        vin: detectedVin || null,
+        mileage: detectedMileage || null,
+      },
     };
   } catch {
     return {
@@ -115,10 +196,23 @@ export function parseSolaceValue(rawText: string): SolaceValuePayload {
       title: "Instant cash offer ready for dealer review.",
       confidence: "Medium",
       admissibility: "PARTIAL",
-      summaryLines: ["Solace produced a response, but it could not be parsed as structured JSON.", rawText.slice(0, 240)],
+      summaryLines: [
+        "Solace produced a response, but it could not be parsed as structured JSON.",
+        rawText.slice(0, 240),
+      ],
       conditionNotes: [],
       missingItems: [],
-      dealerReviewNotes: ["Review the raw LLM output in intake metadata before quoting a final number."],
+      dealerReviewNotes: [
+        "Review the raw LLM output in intake metadata before quoting a final number.",
+      ],
+      detectedVin: null,
+      detectedMileage: null,
+      vin: null,
+      mileage: null,
+      vehicle: {
+        vin: null,
+        mileage: null,
+      },
     };
   }
 }
