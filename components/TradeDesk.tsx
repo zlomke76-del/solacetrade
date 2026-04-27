@@ -126,20 +126,11 @@ function inputStyle(): React.CSSProperties {
 }
 
 function getValueVin(value: SolaceValue | null) {
-  return (
-    value?.detectedVin ||
-    value?.vin ||
-    value?.vehicle?.vin ||
-    ""
-  );
+  return value?.detectedVin || value?.vin || value?.vehicle?.vin || "";
 }
 
 function getValueMileage(value: SolaceValue | null) {
-  const raw =
-    value?.detectedMileage ??
-    value?.mileage ??
-    value?.vehicle?.mileage ??
-    "";
+  const raw = value?.detectedMileage ?? value?.mileage ?? value?.vehicle?.mileage ?? "";
   return raw ? String(raw) : "";
 }
 
@@ -167,42 +158,30 @@ export default function TradeDesk({
   const [submitting, setSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [showVehicleEdit, setShowVehicleEdit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
-  const capturedCount = Object.values(photos).filter(Boolean).length;
+  const capturedCount = Object.values(photos).filter((file) => file instanceof File && file.size > 0).length;
   const photoProgress = Math.round((capturedCount / captureSteps.length) * 100);
-  const mileageNumber = cleanMileage(mileage);
   const scanComplete = capturedCount === captureSteps.length;
   const showDetails = scanComplete;
-  const canRequestOffer = isInternal
-    ? scanComplete
-    : scanComplete && customerName.trim().length > 0;
+  const canRequestOffer = scanComplete && customerName.trim().length > 0;
 
   const missingItems = useMemo(() => {
     const missing: string[] = [];
     captureSteps.forEach((step) => {
-      if (!photos[step.key]) missing.push(`${step.shortLabel} photo`);
+      const file = photos[step.key];
+      if (!(file instanceof File) || file.size <= 0) missing.push(`${step.shortLabel} photo`);
     });
-
-    if (!scanComplete) return missing;
-
-    if (isInternal) {
-      if (!vin.trim()) missing.push("VIN");
-      if (!mileageNumber) missing.push("mileage");
-    } else if (!customerName.trim()) {
-      missing.push("name");
-    }
-
+    if (scanComplete && !customerName.trim()) missing.push("name");
     return missing;
-  }, [isInternal, scanComplete, customerName, vin, mileageNumber, photos]);
+  }, [scanComplete, customerName, photos]);
 
-  const nextMissingPhoto = captureSteps.find((step) => !photos[step.key]);
-  const nextMissing = scanComplete
-    ? missingItems[0]
-    : `${nextMissingPhoto?.shortLabel || "next"} photo`;
-
+  const nextMissingPhoto = captureSteps.find((step) => {
+    const file = photos[step.key];
+    return !(file instanceof File) || file.size <= 0;
+  });
+  const nextMissing = scanComplete ? missingItems[0] : `${nextMissingPhoto?.shortLabel || "next"} photo`;
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
 
@@ -239,13 +218,8 @@ export default function TradeDesk({
       return;
     }
 
-    if (!isInternal && !customerName.trim()) {
+    if (!customerName.trim()) {
       setErrorMessage("Enter your name so Solace can prepare the offer file.");
-      return;
-    }
-
-    if (isInternal && (!vin.trim() || !mileageNumber)) {
-      setErrorMessage(`Next needed: ${nextMissing}.`);
       return;
     }
 
@@ -254,8 +228,6 @@ export default function TradeDesk({
     try {
       const formData = new FormData();
       formData.append("mode", mode);
-      formData.append("vin", vin);
-      formData.append("mileage", mileage);
       formData.append("contact", contact);
       formData.append("customerName", customerName);
       formData.append("salesperson", salesperson);
@@ -263,7 +235,9 @@ export default function TradeDesk({
 
       for (const step of captureSteps) {
         const file = photos[step.key];
-        if (file) formData.append(step.key, file);
+        if (file instanceof File && file.size > 0) {
+          formData.append(step.key, file, file.name || `${step.key}.jpg`);
+        }
       }
 
       setStatusMessage("Saving vehicle scan...");
@@ -295,9 +269,8 @@ export default function TradeDesk({
       const nextVin = getValueVin(nextValue);
       const nextMileage = getValueMileage(nextValue);
 
-      if (nextVin && !vin.trim()) setVin(nextVin.toUpperCase());
-      if (nextMileage && !mileage.trim()) setMileage(nextMileage);
-
+      setVin(nextVin ? nextVin.toUpperCase() : "");
+      setMileage(nextMileage || "");
       setValue(nextValue);
       setStatusMessage("Instant cash offer ready.");
     } catch (error) {
@@ -363,7 +336,6 @@ export default function TradeDesk({
     setValue(null);
     setStatusMessage("");
     setErrorMessage("");
-    setShowVehicleEdit(false);
   }
 
   return (
@@ -435,7 +407,7 @@ export default function TradeDesk({
         <p style={{ margin: 0, color: "rgba(255,255,255,0.76)", fontSize: 14, lineHeight: 1.42 }}>
           {started
             ? currentStep.coaching
-            : "Five guided photos first. Solace reads the VIN and mileage from the scan."}
+            : "Five guided photos first. Solace reads VIN and mileage from image evidence."}
         </p>
 
         <div
@@ -492,8 +464,7 @@ export default function TradeDesk({
             style={{
               position: "absolute",
               inset: 0,
-              background:
-                "linear-gradient(180deg, rgba(2,6,23,0.48), rgba(2,6,23,0.04) 44%, rgba(2,6,23,0.72))",
+              background: "linear-gradient(180deg, rgba(2,6,23,0.48), rgba(2,6,23,0.04) 44%, rgba(2,6,23,0.72))",
             }}
           />
           <div
@@ -543,7 +514,7 @@ export default function TradeDesk({
         >
           {captureSteps.map((step, index) => {
             const active = stepIndex === index;
-            const done = Boolean(photos[step.key]);
+            const done = photos[step.key] instanceof File && (photos[step.key]?.size || 0) > 0;
             return (
               <button
                 key={step.key}
@@ -584,17 +555,11 @@ export default function TradeDesk({
           >
             <div>
               <h3 style={{ margin: 0, fontSize: 18 }}>
-                {showDetails
-                  ? isInternal
-                    ? "Add vehicle details"
-                    : "Tell us where to send the offer"
-                  : "Finish the photo sequence"}
+                {showDetails ? "Tell us where to send the offer" : "Finish the photo sequence"}
               </h3>
               <p style={{ margin: "4px 0 0", color: muted, fontSize: 13, lineHeight: 1.35 }}>
                 {showDetails
-                  ? isInternal
-                    ? "Internal mode can enter VIN and mileage manually."
-                    : "Solace reads VIN and mileage from the scan. You only need to enter your name."
+                  ? "VIN and mileage are read from the scan evidence. You only enter identity and contact."
                   : nextMissing
                     ? `Next needed: ${nextMissing}.`
                     : "Keep going."}
@@ -613,40 +578,24 @@ export default function TradeDesk({
             </div>
           </div>
 
-          {isInternal && showDetails && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 9,
-                marginBottom: 9,
-              }}
-            >
-              <input
-                placeholder="Salesperson"
-                value={salesperson}
-                onChange={(event) => setSalesperson(event.target.value)}
-                style={inputStyle()}
-              />
-              <input
-                placeholder="Customer"
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-                style={inputStyle()}
-              />
-            </div>
-          )}
-
-          {!isInternal && showDetails && (
+          {showDetails && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 9 }}>
+              {isInternal && (
+                <input
+                  placeholder="Salesperson"
+                  value={salesperson}
+                  onChange={(event) => setSalesperson(event.target.value)}
+                  style={inputStyle()}
+                />
+              )}
               <input
-                placeholder="Name"
+                placeholder={isInternal ? "Customer" : "Name"}
                 value={customerName}
                 onChange={(event) => setCustomerName(event.target.value)}
                 style={inputStyle()}
               />
               <input
-                placeholder="Phone or email (optional)"
+                placeholder="Phone or email"
                 value={contact}
                 onChange={(event) => setContact(event.target.value)}
                 style={inputStyle()}
@@ -654,25 +603,7 @@ export default function TradeDesk({
             </div>
           )}
 
-          {isInternal && showDetails && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 9 }}>
-              <input
-                placeholder="VIN"
-                value={vin}
-                onChange={(event) => setVin(event.target.value.toUpperCase())}
-                style={inputStyle()}
-              />
-              <input
-                placeholder="Mileage"
-                value={mileage}
-                onChange={(event) => setMileage(event.target.value)}
-                inputMode="numeric"
-                style={inputStyle()}
-              />
-            </div>
-          )}
-
-          {!isInternal && showDetails && (
+          {showDetails && (
             <div
               style={{
                 marginTop: 10,
@@ -682,41 +613,18 @@ export default function TradeDesk({
                 border: "1px solid #e2e8f0",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                <div>
-                  <strong style={{ display: "block", fontSize: 13, color: dark }}>
-                    Vehicle details from scan
-                  </strong>
-                  <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
-                    Solace will read these from the VIN and odometer photos.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowVehicleEdit((current) => !current)}
-                  style={{
-                    border: "1px solid #cbd5e1",
-                    background: showVehicleEdit ? "#fef2f2" : "#f8fafc",
-                    color: showVehicleEdit ? "#991b1b" : dark,
-                    borderRadius: 999,
-                    padding: "7px 10px",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {showVehicleEdit ? "Hide edit" : "Edit"}
-                </button>
-              </div>
+              <strong style={{ display: "block", fontSize: 13, color: dark }}>
+                Vehicle details from scan evidence
+              </strong>
+              <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
+                VIN and mileage are read from the uploaded VIN and odometer photos. They cannot be manually entered.
+              </p>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 10 }}>
                 <div style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 13 }}>
                   <strong>VIN</strong>
                   <br />
-                  <span style={{ color: detectedVin ? dark : muted }}>
-                    {detectedVin || "Will be detected from scan"}
-                  </span>
+                  <span style={{ color: detectedVin ? dark : muted }}>{detectedVin || "Will be detected from scan"}</span>
                 </div>
                 <div style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 13 }}>
                   <strong>Mileage</strong>
@@ -726,24 +634,6 @@ export default function TradeDesk({
                   </span>
                 </div>
               </div>
-
-              {showVehicleEdit && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 10 }}>
-                  <input
-                    placeholder="Edit VIN if needed"
-                    value={vin}
-                    onChange={(event) => setVin(event.target.value.toUpperCase())}
-                    style={inputStyle()}
-                  />
-                  <input
-                    placeholder="Edit mileage if needed"
-                    value={mileage}
-                    onChange={(event) => setMileage(event.target.value)}
-                    inputMode="numeric"
-                    style={inputStyle()}
-                  />
-                </div>
-              )}
             </div>
           )}
 
@@ -759,7 +649,7 @@ export default function TradeDesk({
 
           <button
             type="button"
-            disabled={submitting || !canRequestOffer}
+            disabled={submitting}
             onClick={createIntakeAndValue}
             style={{
               width: "100%",
@@ -771,11 +661,9 @@ export default function TradeDesk({
               color: "white",
               fontSize: 15,
               fontWeight: 900,
-              cursor: submitting ? "wait" : !canRequestOffer ? "not-allowed" : "pointer",
-              opacity: submitting ? 0.72 : !canRequestOffer ? 0.62 : 1,
-              boxShadow: isInternal
-                ? "0 16px 32px rgba(15,23,42,0.18)"
-                : "0 16px 32px rgba(185,28,28,0.22)",
+              cursor: submitting ? "wait" : "pointer",
+              opacity: submitting ? 0.72 : 1,
+              boxShadow: isInternal ? "0 16px 32px rgba(15,23,42,0.18)" : "0 16px 32px rgba(185,28,28,0.22)",
             }}
           >
             {submitting
@@ -783,10 +671,8 @@ export default function TradeDesk({
               : canRequestOffer
                 ? "Get My Instant Cash Offer"
                 : showDetails
-                  ? isInternal
-                    ? "Add VIN and Mileage"
-                    : "Enter Name to Continue"
-                  : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
+                  ? "Enter Name to Continue"
+                  : "Continue Photo Scan"}
           </button>
         </div>
 
@@ -871,6 +757,12 @@ export default function TradeDesk({
               </p>
             ))}
 
+            {(value.missingItems || []).length > 0 && (
+              <div style={{ marginTop: 12, padding: 12, borderRadius: 16, background: "#fff7ed", color: "#9a3412", fontSize: 13, fontWeight: 800 }}>
+                {value.missingItems.join(" · ")}
+              </div>
+            )}
+
             <div style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>What would you like to do next?</strong>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
@@ -899,15 +791,6 @@ export default function TradeDesk({
                 ))}
               </div>
             </div>
-
-            {isInternal && (
-              <input
-                placeholder="Manager email or routing contact"
-                value={contact}
-                onChange={(event) => setContact(event.target.value)}
-                style={{ ...inputStyle(), marginTop: 12 }}
-              />
-            )}
 
             <button
               type="button"
