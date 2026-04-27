@@ -128,7 +128,20 @@ async function fetchNhtsaRecalls({
   }
 }
 
-function getRecallSummary({
+function getCustomerRecallSummary({
+  checked,
+}: {
+  checked: boolean;
+  error: string | null;
+}) {
+  if (!checked) {
+    return "Recall check could not be completed automatically. The dealer will verify recall status by VIN.";
+  }
+
+  return "Dealer will verify any open or unrepaired recalls by VIN.";
+}
+
+function getDealerRecallSummary({
   checked,
   recallCount,
   error,
@@ -139,15 +152,15 @@ function getRecallSummary({
 }) {
   if (!checked) {
     return error
-      ? `Recall check unavailable: ${error}`
-      : "Recall check unavailable for this vehicle configuration.";
+      ? `Recall lookup unavailable: ${error}`
+      : "Recall lookup unavailable for this vehicle configuration.";
   }
 
   if (recallCount === 0) {
-    return "No applicable recalls were found for this year, make, and model in the NHTSA database.";
+    return "No NHTSA year/make/model recall records returned. Dealer should still verify open/unrepaired status by VIN.";
   }
 
-  return `${recallCount} applicable recall(s) found for this year, make, and model. Dealer must verify open/unrepaired status by VIN.`;
+  return `${recallCount} NHTSA year/make/model recall record(s) returned. This is not VIN-specific open recall status; verify open/unrepaired status by VIN.`;
 }
 
 function renderRecallItems(recalls: NhtsaRecall[]) {
@@ -290,7 +303,11 @@ export async function POST(
       model: vehicleModel,
     });
     const recallCount = recallResult.recalls.length;
-    const recallSummary = getRecallSummary({
+    const customerRecallSummary = getCustomerRecallSummary({
+      checked: recallResult.checked,
+      error: recallResult.error,
+    });
+    const dealerRecallSummary = getDealerRecallSummary({
       checked: recallResult.checked,
       recallCount,
       error: recallResult.error,
@@ -342,7 +359,7 @@ export async function POST(
 
               <div style="margin-top:16px;padding:12px;border-radius:14px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:13px;">
                 <strong>Recall check</strong><br />
-                ${escapeHtml(recallSummary)}
+                ${escapeHtml(customerRecallSummary)}
               </div>
 
               <div style="margin-top:16px;padding:12px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px;">
@@ -403,7 +420,7 @@ export async function POST(
 
               <div style="margin-top:18px;padding:14px;border-radius:16px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;">
                 <h3 style="margin:0 0 8px;font-size:15px;">Recall check</h3>
-                <p style="margin:0;color:#1e3a8a;font-size:13px;">${escapeHtml(recallSummary)}</p>
+                <p style="margin:0;color:#1e3a8a;font-size:13px;">${escapeHtml(dealerRecallSummary)}</p>
                 ${recallItemsHtml ? `<ul style="margin:10px 0 0;padding-left:18px;color:#334155;font-size:12px;">${recallItemsHtml}</ul>` : ""}
               </div>
 
