@@ -7,32 +7,43 @@ if (!stripeSecretKey) {
 }
 
 export const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: "2024-12-18.acacia",
+  apiVersion: "2025-02-24.acacia",
 });
 
 export function getStripeMonthlyPriceId() {
-  const value = process.env.STRIPE_MONTHLY_PRICE_ID;
-  if (!value) {
+  const priceId = process.env.STRIPE_MONTHLY_PRICE_ID;
+
+  if (!priceId) {
     throw new Error("Missing STRIPE_MONTHLY_PRICE_ID environment variable.");
   }
-  return value;
+
+  return priceId;
 }
 
 export function getStripeSetupPriceId() {
-  const value = process.env.STRIPE_SETUP_PRICE_ID;
-  if (!value) {
+  const priceId = process.env.STRIPE_SETUP_PRICE_ID;
+
+  if (!priceId) {
     throw new Error("Missing STRIPE_SETUP_PRICE_ID environment variable.");
   }
-  return value;
+
+  return priceId;
 }
 
-export function getAppBaseUrl() {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
-  if (explicit) return explicit.replace(/\/$/, "");
+export function getStripeWebhookSecret() {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`.replace(/\/$/, "");
+  if (!webhookSecret) {
+    throw new Error("Missing STRIPE_WEBHOOK_SECRET environment variable.");
   }
 
-  return "http://localhost:3000";
+  return webhookSecret;
+}
+
+export function getAppUrl() {
+  return (process.env.NEXT_PUBLIC_APP_URL || "https://www.solacetrade.ai").replace(/\/$/, "");
+}
+
+export function isActiveBillingStatus(status: string | null | undefined) {
+  return status === "active" || status === "trialing";
 }
