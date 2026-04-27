@@ -13,44 +13,50 @@ type CaptureStep = {
   label: string;
   help: string;
   requiredForOffer: boolean;
+  image: string;
+  shortLabel: string;
 };
 
 const captureSteps: CaptureStep[] = [
   {
     key: "front",
     label: "Front of vehicle",
-    help: "Stand a few steps back and capture the full front view.",
+    shortLabel: "Front",
+    help: "Stand a few steps back. Capture the full front view, including bumper, grille, and headlights.",
     requiredForOffer: true,
+    image: "/images/vehicle_scan_01.png",
   },
   {
     key: "driverSide",
     label: "Driver side",
-    help: "Capture the full driver side from bumper to bumper.",
-    requiredForOffer: false,
+    shortLabel: "Driver side",
+    help: "Capture the full driver side from bumper to bumper. Keep both wheels visible.",
+    requiredForOffer: true,
+    image: "/images/vehicle_scan_02.png",
   },
   {
     key: "rear",
     label: "Rear of vehicle",
-    help: "Capture the full rear view including bumper and tailgate/trunk.",
-    requiredForOffer: false,
-  },
-  {
-    key: "interior",
-    label: "Interior",
-    help: "Capture the driver seat, dash, and general interior condition.",
-    requiredForOffer: false,
+    shortLabel: "Rear",
+    help: "Stand a few steps back. Capture the full rear view, including bumper and taillights.",
+    requiredForOffer: true,
+    image: "/images/vehicle_scan_03.png",
   },
   {
     key: "odometer",
     label: "Odometer",
-    help: "Capture the mileage clearly on the dash display.",
+    shortLabel: "Odometer",
+    help: "Capture the mileage clearly. Keep the display straight, sharp, and free of glare.",
     requiredForOffer: true,
+    image: "/images/vehicle_scan_04.png",
   },
   {
     key: "vin",
     label: "VIN",
-    help: "Capture the VIN plate through the windshield or door jamb.",
+    shortLabel: "VIN",
+    help: "Capture the VIN clearly through the windshield or inside the door jamb. All characters should be readable.",
     requiredForOffer: true,
+    image: "/images/vehicle_scan_05.png",
   },
 ];
 
@@ -89,8 +95,6 @@ const fieldStyle = {
   fontSize: 15,
 };
 
-const previewImage = "/images/vehicle_scan_01.png";
-
 export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   const isInternal = mode === "internal";
   const [started, setStarted] = useState(false);
@@ -117,9 +121,9 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
     const missing: string[] = [];
     if (!vin.trim()) missing.push("VIN");
     if (!mileageNumber) missing.push("mileage");
-    if (!photos.front) missing.push("front photo");
-    if (!photos.odometer) missing.push("odometer photo");
-    if (!photos.vin) missing.push("VIN photo");
+    for (const step of captureSteps) {
+      if (!photos[step.key]) missing.push(`${step.shortLabel} photo`);
+    }
     return missing;
   }, [vin, mileageNumber, photos]);
 
@@ -130,6 +134,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
     if (!file || !currentStep) return;
 
     setStarted(true);
+    setResult(null);
 
     setPhotos((previous) => ({
       ...previous,
@@ -154,7 +159,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         admissibility: offerAdmissible ? "PASS" : "PARTIAL",
         lines: [
           offerAdmissible
-            ? "Core offer state is present: VIN, mileage, front photo, odometer photo, and VIN photo."
+            ? "Core offer state is present: VIN, mileage, and all five guided photos."
             : `Missing state: ${missingItems.join(", ")}. Manager review can proceed, but the packet must be treated as incomplete.`,
           `Captured photos: ${capturedCount} of ${captureSteps.length}.`,
           `Intent: ${intent === "trade" ? "Trade toward purchase" : intent === "sell" ? "Sell vehicle" : "Value exploration"}.`,
@@ -173,7 +178,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         admissibility: "PARTIAL",
         lines: [
           `Missing: ${missingItems.join(", ")}.`,
-          "Add the missing items to unlock a stronger preliminary cash offer.",
+          "Complete the guided capture to unlock a stronger preliminary cash offer.",
           "Open recall check: pending VIN verification.",
         ],
       });
@@ -197,7 +202,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
       confidence: scanComplete ? "High" : "Medium",
       admissibility: "PASS",
       lines: [
-        "Core offer state verified: VIN, mileage, front photo, odometer photo, and VIN photo are present.",
+        "Core offer state verified: VIN, mileage, and all five guided photos are present.",
         "Open recall check: pending real NHTSA integration.",
         "Vehicle file ready for Brenham CDJR review.",
       ],
@@ -205,9 +210,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   }
 
   function openCameraOrFilePicker() {
-    if (!started) {
-      setStarted(true);
-    }
+    if (!started) setStarted(true);
 
     window.setTimeout(() => {
       fileInputRef.current?.click();
@@ -230,12 +233,14 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   }
 
   function renderCapturePreview({ startMode = false }: { startMode?: boolean }) {
+    const displayStep = startMode ? captureSteps[0] : currentStep;
+
     return (
       <label
         style={{
           position: "relative",
           display: "block",
-          minHeight: startMode ? 250 : 270,
+          minHeight: startMode ? 230 : 250,
           borderRadius: 18,
           overflow: "hidden",
           cursor: "pointer",
@@ -253,12 +258,12 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         />
 
         <img
-          src={previewImage}
-          alt="Vehicle scan preview"
+          src={displayStep.image}
+          alt={`${displayStep.label} capture reference`}
           style={{
             width: "100%",
             height: "100%",
-            minHeight: startMode ? 250 : 270,
+            minHeight: startMode ? 230 : 250,
             display: "block",
             objectFit: "cover",
             filter: "brightness(0.72)",
@@ -270,20 +275,20 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(180deg, rgba(2,6,23,0.38) 0%, rgba(2,6,23,0.12) 38%, rgba(2,6,23,0.56) 100%)",
+              "linear-gradient(180deg, rgba(2,6,23,0.36) 0%, rgba(2,6,23,0.08) 38%, rgba(2,6,23,0.60) 100%)",
           }}
         />
 
         <div
           style={{
             position: "absolute",
-            top: 14,
-            left: 14,
-            right: 14,
+            top: 12,
+            left: 12,
+            right: 12,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
+            gap: 10,
             color: "white",
           }}
         >
@@ -291,9 +296,9 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
             style={{
               padding: "7px 10px",
               borderRadius: 999,
-              background: "rgba(15,23,42,0.62)",
+              background: "rgba(15,23,42,0.66)",
               border: "1px solid rgba(255,255,255,0.16)",
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 900,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
@@ -307,9 +312,9 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
             style={{
               padding: "7px 10px",
               borderRadius: 999,
-              background: "rgba(255,255,255,0.88)",
+              background: "rgba(255,255,255,0.90)",
               color: "#0f172a",
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 900,
             }}
           >
@@ -328,16 +333,16 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         >
           <div
             style={{
-              width: 64,
-              height: 64,
+              width: 58,
+              height: 58,
               borderRadius: "50%",
-              background: "rgba(255,255,255,0.92)",
+              background: "rgba(255,255,255,0.93)",
               color: "#0f172a",
               display: "grid",
               placeItems: "center",
               boxShadow: "0 18px 42px rgba(0,0,0,0.34)",
-              border: "1px solid rgba(255,255,255,0.7)",
-              fontSize: 30,
+              border: "1px solid rgba(255,255,255,0.75)",
+              fontSize: 28,
               fontWeight: 800,
               lineHeight: 1,
             }}
@@ -349,19 +354,19 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         <div
           style={{
             position: "absolute",
-            left: 16,
-            right: 16,
-            bottom: 14,
+            left: 14,
+            right: 14,
+            bottom: 12,
             color: "white",
           }}
         >
-          <strong style={{ display: "block", fontSize: 15 }}>
-            {startMode ? "Tap to open camera" : currentStep.label}
+          <strong style={{ display: "block", fontSize: 14 }}>
+            {startMode ? "Start with the front photo" : displayStep.label}
           </strong>
-          <span style={{ display: "block", marginTop: 4, fontSize: 13, opacity: 0.86 }}>
+          <span style={{ display: "block", marginTop: 4, fontSize: 12, opacity: 0.88 }}>
             {startMode
               ? "On desktop, this opens a file picker instead."
-              : `Tap to capture the ${currentStep.label.toLowerCase()}.`}
+              : `Tap to capture the ${displayStep.label.toLowerCase()}.`}
           </span>
         </div>
       </label>
@@ -373,14 +378,14 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
       style={{
         border: isInternal ? "1px solid rgba(255,255,255,0.16)" : "1px solid #ddd",
         borderRadius: 22,
-        padding: 24,
+        padding: 20,
         background: "white",
         boxShadow: isInternal
           ? "0 28px 80px rgba(0,0,0,0.34)"
           : "0 24px 70px rgba(0,0,0,0.12)",
       }}
     >
-      <div style={{ marginBottom: 18 }}>
+      <div style={{ marginBottom: 16 }}>
         <div
           style={{
             display: "inline-flex",
@@ -407,11 +412,11 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           {isInternal ? "Internal Manager Routing" : "Vehicle Scan Active"}
         </div>
 
-        <h2 style={{ margin: "14px 0 8px", fontSize: 28, letterSpacing: "-0.035em" }}>
+        <h2 style={{ margin: "12px 0 7px", fontSize: 26, letterSpacing: "-0.035em" }}>
           {isInternal ? "Build the manager evaluation packet." : "Start your vehicle scan."}
         </h2>
 
-        <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.55 }}>
+        <p style={{ margin: 0, color: "#475569", fontSize: 15, lineHeight: 1.5 }}>
           {isInternal
             ? "Capture the vehicle once, preserve the state, and route a clean packet to the used car manager."
             : "Capture your vehicle. The rest is handled."}
@@ -421,7 +426,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
       {!started ? (
         <div
           style={{
-            padding: 14,
+            padding: 12,
             border: "1px solid #e2e8f0",
             borderRadius: 18,
             background: "#f8fafc",
@@ -429,14 +434,22 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         >
           {renderCapturePreview({ startMode: true })}
 
-          <div style={{ padding: "14px 4px 0", textAlign: "center" }}>
+          <div style={{ padding: "12px 2px 0", textAlign: "center" }}>
             <h3 style={{ margin: "0 0 5px", fontSize: 18 }}>
               {isInternal ? "Start sales-floor evaluation" : "Capture the first photo."}
             </h3>
-            <p style={{ margin: "0 auto 12px", maxWidth: 480, color: "#475569", lineHeight: 1.45, fontSize: 14 }}>
+            <p
+              style={{
+                margin: "0 auto 12px",
+                maxWidth: 480,
+                color: "#475569",
+                lineHeight: 1.45,
+                fontSize: 14,
+              }}
+            >
               {isInternal
                 ? "Designed for consultants capturing a trade while the customer is at the dealership."
-                : "Open the camera first. We’ll guide the rest of the vehicle file step by step."}
+                : "Open the camera first. We’ll guide the vehicle file step by step."}
             </p>
 
             <button
@@ -466,7 +479,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               background: "#e5e7eb",
               borderRadius: 999,
               overflow: "hidden",
-              marginBottom: 18,
+              marginBottom: 16,
             }}
           >
             <div
@@ -489,13 +502,13 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           >
             <div
               style={{
-                padding: 14,
+                padding: 12,
                 border: "1px solid #e2e8f0",
                 borderRadius: 18,
                 background: "#fff",
               }}
             >
-              <div style={{ padding: "4px 4px 14px" }}>
+              <div style={{ padding: "4px 4px 12px" }}>
                 <div
                   style={{
                     fontSize: 12,
@@ -510,7 +523,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
                 </div>
 
                 <h3 style={{ margin: "8px 0 6px", fontSize: 22 }}>{currentStep.label}</h3>
-                <p style={{ margin: 0, color: "#475569" }}>{currentStep.help}</p>
+                <p style={{ margin: 0, color: "#475569", lineHeight: 1.45 }}>{currentStep.help}</p>
               </div>
 
               {renderCapturePreview({ startMode: false })}
@@ -543,14 +556,10 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
                 >
                   <strong style={{ display: "block", fontSize: 13 }}>
                     {photos[step.key] ? "✓ " : ""}
-                    {step.label}
+                    {step.shortLabel}
                   </strong>
                   <span style={{ fontSize: 12, color: "#64748b" }}>
-                    {photos[step.key]
-                      ? "Captured"
-                      : step.requiredForOffer
-                        ? "Required"
-                        : "Recommended"}
+                    {photos[step.key] ? "Captured" : "Required"}
                   </span>
                 </button>
               ))}
