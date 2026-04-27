@@ -22,38 +22,6 @@ type CaptureStep = {
 
 type PhotoMap = Record<CaptureStep["key"], File | null>;
 
-type MarketCompBand = {
-  low: number | null;
-  high: number | null;
-};
-
-type MarketCompSource = {
-  source: "MMR" | "KBB" | "Market API" | "Auction Proxy";
-  status: "live" | "estimated" | "not_configured" | "failed";
-  trade: MarketCompBand;
-  retail: MarketCompBand;
-  privateParty: MarketCompBand;
-  auction: MarketCompBand;
-  note: string;
-};
-
-type MarketCompSnapshot = {
-  generatedAt: string;
-  vin: string | null;
-  mileage: number | null;
-  vehicleLabel: string | null;
-  sources: MarketCompSource[];
-  acquisitionTarget: number | null;
-  tradeLow: number | null;
-  tradeHigh: number | null;
-  retailLow: number | null;
-  retailHigh: number | null;
-  privateLow: number | null;
-  privateHigh: number | null;
-  confidence: "Low" | "Medium" | "High";
-  basis: string;
-};
-
 type SolaceValue = {
   offerAmount: number | null;
   offerRangeLow: number | null;
@@ -73,6 +41,15 @@ type SolaceValue = {
   vehicleMake?: string | null;
   vehicleModel?: string | null;
   vehicleTrim?: string | null;
+  vehicleBodyClass?: string | null;
+  vehicleDriveType?: string | null;
+  vehicleEngine?: string | null;
+  vehicleFuelType?: string | null;
+  vehicleDoors?: string | null;
+  vehicleTransmission?: string | null;
+  vehicleSeries?: string | null;
+  vehicleOptions?: string[];
+  optionSignals?: string[];
   year?: string | number | null;
   make?: string | null;
   model?: string | null;
@@ -84,8 +61,15 @@ type SolaceValue = {
     make?: string | null;
     model?: string | null;
     trim?: string | null;
+    bodyClass?: string | null;
+    driveType?: string | null;
+    engine?: string | null;
+    fuelType?: string | null;
+    doors?: string | null;
+    transmission?: string | null;
+    series?: string | null;
+    options?: string[];
   } | null;
-  marketComps?: MarketCompSnapshot | null;
 };
 
 type IntakeErrorBody = {
@@ -150,19 +134,6 @@ function formatMoney(value: number | null | undefined) {
   }).format(value);
 }
 
-function formatMoneyRange(low: number | null | undefined, high: number | null | undefined) {
-  if (low && high) return `${formatMoney(low)} - ${formatMoney(high)}`;
-  if (low || high) return formatMoney(low || high);
-  return "Pending";
-}
-
-function sourceStatusLabel(status: MarketCompSource["status"]) {
-  if (status === "live") return "Live";
-  if (status === "estimated") return "Proxy";
-  if (status === "failed") return "Failed";
-  return "Off";
-}
-
 function cleanMileage(value: string) {
   return Number(value.replace(/[^\d]/g, ""));
 }
@@ -217,13 +188,57 @@ function cleanVehiclePart(value: string | number | null | undefined) {
   return String(value).trim();
 }
 
+function uniqueDisplayItems(values: Array<string | number | null | undefined>) {
+  const seen = new Set<string>();
+  const items: string[] = [];
+
+  for (const value of values) {
+    const cleaned = cleanVehiclePart(value);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      items.push(cleaned);
+    }
+  }
+
+  return items;
+}
+
 function getValueVehicle(value: SolaceValue | null) {
   const year = cleanVehiclePart(value?.vehicleYear ?? value?.year ?? value?.vehicle?.year);
   const make = cleanVehiclePart(value?.vehicleMake ?? value?.make ?? value?.vehicle?.make);
   const model = cleanVehiclePart(value?.vehicleModel ?? value?.model ?? value?.vehicle?.model);
   const trim = cleanVehiclePart(value?.vehicleTrim ?? value?.trim ?? value?.vehicle?.trim);
+  const bodyClass = cleanVehiclePart(value?.vehicleBodyClass ?? value?.vehicle?.bodyClass);
+  const driveType = cleanVehiclePart(value?.vehicleDriveType ?? value?.vehicle?.driveType);
+  const engine = cleanVehiclePart(value?.vehicleEngine ?? value?.vehicle?.engine);
+  const fuelType = cleanVehiclePart(value?.vehicleFuelType ?? value?.vehicle?.fuelType);
+  const doors = cleanVehiclePart(value?.vehicleDoors ?? value?.vehicle?.doors);
+  const transmission = cleanVehiclePart(
+    value?.vehicleTransmission ?? value?.vehicle?.transmission
+  );
+  const series = cleanVehiclePart(value?.vehicleSeries ?? value?.vehicle?.series);
+  const options = uniqueDisplayItems([
+    ...(value?.vehicleOptions || []),
+    ...(value?.vehicle?.options || []),
+    ...(value?.optionSignals || []),
+  ]);
 
-  return { year, make, model, trim };
+  return {
+    year,
+    make,
+    model,
+    trim,
+    bodyClass,
+    driveType,
+    engine,
+    fuelType,
+    doors,
+    transmission,
+    series,
+    options,
+  };
 }
 
 function getValueVehicleLabel(value: SolaceValue | null) {
@@ -867,6 +882,29 @@ export default function TradeDesk({
                     {detectedVehicleLabel || "Will be decoded after VIN scan"}
                   </span>
                 </div>
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 13,
+                    background: "#f8fafc",
+                    fontSize: 13,
+                  }}
+                >
+                  <strong>Trim / options</strong>
+                  <br />
+                  <span
+                    style={{
+                      color:
+                        detectedVehicle.trim || detectedVehicle.options.length
+                          ? dark
+                          : muted,
+                    }}
+                  >
+                    {detectedVehicle.trim ||
+                      detectedVehicle.options.slice(0, 3).join(" · ") ||
+                      "Will be refined from VIN and visible option signals"}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -1067,135 +1105,73 @@ export default function TradeDesk({
                   {detectedVehicle.model || "Pending"}
                   {detectedVehicle.trim ? ` · Trim: ${detectedVehicle.trim}` : ""}
                 </div>
-              </div>
-            )}
-
-            {value.marketComps && (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: 12,
-                  borderRadius: 16,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    alignItems: "flex-start",
-                    marginBottom: 10,
-                  }}
-                >
-                  <div>
-                    <strong style={{ display: "block", fontSize: 14 }}>
-                      Live market comp logic
-                    </strong>
-                    <span style={{ color: muted, fontSize: 12 }}>
-                      MMR / KBB / market API when configured, with auction proxy guardrail.
-                    </span>
-                  </div>
-                  <span
-                    style={{
-                      padding: "5px 8px",
-                      borderRadius: 999,
-                      background: value.marketComps.confidence === "High" ? "#ecfdf5" : "#fff7ed",
-                      color: value.marketComps.confidence === "High" ? "#047857" : "#9a3412",
-                      fontSize: 11,
-                      fontWeight: 900,
-                    }}
-                  >
-                    {value.marketComps.confidence} confidence
-                  </span>
-                </div>
 
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                     gap: 8,
+                    marginTop: 10,
                   }}
                 >
-                  <span
-                    style={{
-                      padding: 10,
-                      borderRadius: 13,
-                      background: "white",
-                      fontSize: 12,
-                    }}
-                  >
-                    <strong>Trade / acquisition</strong>
-                    <br />
-                    {formatMoneyRange(value.marketComps.tradeLow, value.marketComps.tradeHigh)}
-                  </span>
-                  <span
-                    style={{
-                      padding: 10,
-                      borderRadius: 13,
-                      background: "white",
-                      fontSize: 12,
-                    }}
-                  >
-                    <strong>Retail market</strong>
-                    <br />
-                    {formatMoneyRange(value.marketComps.retailLow, value.marketComps.retailHigh)}
-                  </span>
-                  <span
-                    style={{
-                      padding: 10,
-                      borderRadius: 13,
-                      background: "white",
-                      fontSize: 12,
-                    }}
-                  >
-                    <strong>Private party</strong>
-                    <br />
-                    {formatMoneyRange(value.marketComps.privateLow, value.marketComps.privateHigh)}
-                  </span>
+                  {[
+                    ["Body", detectedVehicle.bodyClass],
+                    ["Drive", detectedVehicle.driveType],
+                    ["Engine", detectedVehicle.engine],
+                    ["Fuel", detectedVehicle.fuelType],
+                    ["Doors", detectedVehicle.doors],
+                    ["Trans.", detectedVehicle.transmission],
+                  ]
+                    .filter(([, item]) => Boolean(item))
+                    .map(([label, item]) => (
+                      <span
+                        key={label}
+                        style={{
+                          padding: 8,
+                          borderRadius: 12,
+                          background: "white",
+                          border: "1px solid #e2e8f0",
+                          color: "#334155",
+                        }}
+                      >
+                        <strong>{label}</strong>
+                        <br />
+                        {item}
+                      </span>
+                    ))}
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                    gap: 6,
-                    marginTop: 9,
-                  }}
-                >
-                  {value.marketComps.sources.map((source) => (
-                    <span
-                      key={source.source}
-                      title={source.note}
+                {detectedVehicle.options.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <strong style={{ display: "block", marginBottom: 6 }}>
+                      Configuration / option signals
+                    </strong>
+                    <div
                       style={{
-                        padding: "7px 6px",
-                        borderRadius: 12,
-                        background:
-                          source.status === "live"
-                            ? "#ecfdf5"
-                            : source.status === "estimated"
-                              ? "#eff6ff"
-                              : "#f1f5f9",
-                        color:
-                          source.status === "live"
-                            ? "#047857"
-                            : source.status === "estimated"
-                              ? "#1d4ed8"
-                              : muted,
-                        fontSize: 11,
-                        fontWeight: 900,
-                        textAlign: "center",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 7,
                       }}
                     >
-                      {source.source}: {sourceStatusLabel(source.status)}
-                    </span>
-                  ))}
-                </div>
-
-                <p style={{ margin: "9px 0 0", color: muted, fontSize: 12, lineHeight: 1.4 }}>
-                  {value.marketComps.basis}
-                </p>
+                      {detectedVehicle.options.slice(0, 10).map((option) => (
+                        <span
+                          key={option}
+                          style={{
+                            padding: "6px 8px",
+                            borderRadius: 999,
+                            background: "white",
+                            border: "1px solid #e2e8f0",
+                            color: "#334155",
+                            fontSize: 12,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {option}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
