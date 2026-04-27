@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   cleanMileage,
   cleanText,
@@ -8,26 +8,47 @@ import {
   logTradeEvent,
   SOLACETRADE_SCHEMA,
   TRADE_SCAN_BUCKET,
-} from "../../../../../lib/solacetrade";
+} from "@/lib/solacetrade";
 
 const photoSteps = ["front", "driverSide", "rear", "odometer", "vin"];
 
 function extensionFor(file: File) {
-  const fallback = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const fallback =
+    file.type === "image/png"
+      ? "png"
+      : file.type === "image/webp"
+        ? "webp"
+        : "jpg";
+
   const source = file.name || "";
   const match = source.match(/\.([a-zA-Z0-9]+)$/);
-  return (match?.[1] || fallback).toLowerCase().replace(/[^a-z0-9]/g, "") || fallback;
+
+  return (
+    (match?.[1] || fallback)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "") || fallback
+  );
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ dealerSlug: string }> }) {
+export async function POST(
+  request: NextRequest,
+  context: { params: { dealerSlug: string } }
+) {
   try {
-    const { dealerSlug } = await context.params;
+    const { dealerSlug } = context.params;
     const dealer = await getDealerBySlug(dealerSlug);
     const formData = await request.formData();
 
-    const mode = cleanText(formData.get("mode"), 20) === "internal" ? "internal" : "customer";
+    const mode =
+      cleanText(formData.get("mode"), 20) === "internal"
+        ? "internal"
+        : "customer";
+
+    // Optional at intake time.
+    // Customer flow relies on the value route reading VIN/mileage from images.
     const vin = cleanVin(formData.get("vin"));
     const mileage = cleanMileage(formData.get("mileage"));
+
     const customerName = cleanText(formData.get("customerName"), 160);
     const customerContact = cleanText(formData.get("contact"), 180);
     const salesperson = cleanText(formData.get("salesperson"), 160);
@@ -35,21 +56,36 @@ export async function POST(request: NextRequest, context: { params: Promise<{ de
 
     const photoEntries = photoSteps
       .map((stepKey) => ({ stepKey, file: formData.get(stepKey) }))
-      .filter((entry): entry is { stepKey: string; file: File } => entry.file instanceof File && entry.file.size > 0);
+      .filter(
+        (entry): entry is { stepKey: string; file: File } =>
+          entry.file instanceof File && entry.file.size > 0
+      );
 
     if (photoEntries.length !== photoSteps.length) {
       return NextResponse.json(
-        { error: "All five guided vehicle photos are required before intake can be created." },
+        {
+          error:
+            "All five guided vehicle photos are required before intake can be created.",
+        },
         { status: 400 }
       );
     }
 
-    if (!vin || vin.length < 11) {
-      return NextResponse.json({ error: "A valid VIN is required." }, { status: 400 });
+    if (mode === "customer" && !customerName) {
+      return NextResponse.json(
+        { error: "Customer name is required before creating the offer file." },
+        { status: 400 }
+      );
     }
 
-    if (!mileage) {
-      return NextResponse.json({ error: "Mileage is required." }, { status: 400 });
+    if (mode === "internal" && (!vin || vin.length < 11 || !mileage)) {
+      return NextResponse.json(
+        {
+          error:
+            "Internal mode requires VIN and mileage before routing the manager packet.",
+        },
+        { status: 400 }
+      );
     }
 
     const { data: intake, error: intakeError } = await supabaseAdmin
@@ -62,8 +98,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ de
         customer_name: customerName || null,
         customer_contact: customerContact || null,
         salesperson: salesperson || null,
-        vin,
-        mileage,
+        vin: vin || null,
+        mileage: mileage || null,
         manager_notes: managerNotes || null,
         photo_count: photoEntries.length,
       })
@@ -90,10 +126,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ de
         });
 
       if (uploadError) {
-        throw new Error(`Photo upload failed for ${stepKey}: ${uploadError.message}`);
+        throw new Error(
+          `Photo upload failed for ${stepKey}: ${uploadError.message}`
+        );
       }
 
       uploadedPaths.push(storagePath);
+
       photoRows.push({
         dealer_id: dealer.id,
         intake_id: intake.id,
@@ -118,7 +157,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ de
     const { error: updateError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
-      .update({ photo_paths: uploadedPaths, photo_count: uploadedPaths.length })
+      .update({
+        photo_paths: uploadedPaths,
+        photo_count: uploadedPaths.length,
+      })
       .eq("id", intake.id)
       .eq("dealer_id", dealer.id);
 
@@ -130,7 +172,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ de
       dealerId: dealer.id,
       intakeId: intake.id,
       eventType: "intake_created",
-      payload: { photoCount: uploadedPaths.length, mode },
+      payload: {
+        photoCount: uploadedPaths.length,
+        mode,
+        hasManualVin: Boolean(vin),
+        hasManualMileage: Boolean(mileage),
+      },
     });
 
     return NextResponse.json({
@@ -143,7 +190,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ de
       photoPaths: uploadedPaths,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown intake error.";
+    const message =
+      error instanceof Error ? error.message : "Unknown intake error.";
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
