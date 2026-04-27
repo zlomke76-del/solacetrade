@@ -70,9 +70,7 @@ export function formatMoney(value: number | null | undefined) {
   }).format(value);
 }
 
-export async function getDealerBySlug(
-  dealerSlug: string
-): Promise<DealerRecord> {
+export async function getDealerBySlug(dealerSlug: string): Promise<DealerRecord> {
   const slug = normalizeDealerSlug(dealerSlug);
 
   const { data, error } = await supabaseAdmin
@@ -97,7 +95,7 @@ export async function getDealerBySlug(
 }
 
 export async function createSignedPhotoUrls(photoPaths: string[]) {
-  const signed = await Promise.all(
+  return Promise.all(
     photoPaths.map(async (path) => {
       const { data, error } = await supabaseAdmin.storage
         .from(TRADE_SCAN_BUCKET)
@@ -109,8 +107,6 @@ export async function createSignedPhotoUrls(photoPaths: string[]) {
       };
     })
   );
-
-  return signed;
 }
 
 export function parseSolaceValue(rawText: string): SolaceValuePayload {
@@ -132,52 +128,29 @@ export function parseSolaceValue(rawText: string): SolaceValuePayload {
       cleanMileage(parsed.vehicle?.mileage);
 
     return {
-      offerAmount:
-        typeof parsed.offerAmount === "number" ? parsed.offerAmount : null,
-      offerRangeLow:
-        typeof parsed.offerRangeLow === "number" ? parsed.offerRangeLow : null,
-      offerRangeHigh:
-        typeof parsed.offerRangeHigh === "number"
-          ? parsed.offerRangeHigh
-          : null,
-      title:
-        cleanText(parsed.title, 160) ||
-        "Instant cash offer ready for dealer review.",
+      offerAmount: typeof parsed.offerAmount === "number" ? parsed.offerAmount : null,
+      offerRangeLow: typeof parsed.offerRangeLow === "number" ? parsed.offerRangeLow : null,
+      offerRangeHigh: typeof parsed.offerRangeHigh === "number" ? parsed.offerRangeHigh : null,
+      title: cleanText(parsed.title, 160) || "Instant cash offer ready for dealer review.",
       confidence:
-        parsed.confidence === "High" ||
-        parsed.confidence === "Medium" ||
-        parsed.confidence === "Low"
+        parsed.confidence === "High" || parsed.confidence === "Medium" || parsed.confidence === "Low"
           ? parsed.confidence
           : "Medium",
       admissibility:
-        parsed.admissibility === "PASS" ||
-        parsed.admissibility === "PARTIAL" ||
-        parsed.admissibility === "DENY"
+        parsed.admissibility === "PASS" || parsed.admissibility === "PARTIAL" || parsed.admissibility === "DENY"
           ? parsed.admissibility
           : "PARTIAL",
       summaryLines: Array.isArray(parsed.summaryLines)
-        ? parsed.summaryLines
-            .map((line) => cleanText(line, 220))
-            .filter(Boolean)
-            .slice(0, 4)
+        ? parsed.summaryLines.map((line) => cleanText(line, 220)).filter(Boolean).slice(0, 4)
         : [],
       conditionNotes: Array.isArray(parsed.conditionNotes)
-        ? parsed.conditionNotes
-            .map((line) => cleanText(line, 220))
-            .filter(Boolean)
-            .slice(0, 6)
+        ? parsed.conditionNotes.map((line) => cleanText(line, 220)).filter(Boolean).slice(0, 6)
         : [],
       missingItems: Array.isArray(parsed.missingItems)
-        ? parsed.missingItems
-            .map((line) => cleanText(line, 160))
-            .filter(Boolean)
-            .slice(0, 6)
+        ? parsed.missingItems.map((line) => cleanText(line, 160)).filter(Boolean).slice(0, 6)
         : [],
       dealerReviewNotes: Array.isArray(parsed.dealerReviewNotes)
-        ? parsed.dealerReviewNotes
-            .map((line) => cleanText(line, 220))
-            .filter(Boolean)
-            .slice(0, 6)
+        ? parsed.dealerReviewNotes.map((line) => cleanText(line, 220)).filter(Boolean).slice(0, 6)
         : [],
       detectedVin: detectedVin || null,
       detectedMileage: detectedMileage || null,
@@ -202,9 +175,7 @@ export function parseSolaceValue(rawText: string): SolaceValuePayload {
       ],
       conditionNotes: [],
       missingItems: [],
-      dealerReviewNotes: [
-        "Review the raw LLM output in intake metadata before quoting a final number.",
-      ],
+      dealerReviewNotes: ["Review the raw LLM output in intake metadata before quoting a final number."],
       detectedVin: null,
       detectedMileage: null,
       vin: null,
