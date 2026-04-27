@@ -22,7 +22,7 @@ export default function Page() {
           textAlign: "center",
         }}
       >
-        Sales: (979) 451-6727 • 1880 US-290, Brenham, TX
+        Sales: (713) 555-0188 • 17400 Northwest Fwy, Jersey Village, TX
       </div>
 
       <header
@@ -39,7 +39,7 @@ export default function Page() {
           zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: 14 }}>Brenham Chrysler Jeep Dodge Ram</strong>
+        <strong style={{ fontSize: 14 }}>Jersey Village Chrysler Jeep Dodge Ram</strong>
         <nav style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
           <span>New</span>
           <span>Used</span>
@@ -155,7 +155,7 @@ export default function Page() {
         id="vehicle-scan"
         style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}
       >
-        <TradeDesk mode="customer" dealerSlug="brenhamcdjr" />
+        <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
       </section>
 
       <section style={{ padding: "24px 18px 38px" }}>
@@ -333,39 +333,38 @@ export default function Page() {
               <span>$595/mo</span>
             </a>
 
-<div style={{ marginTop: 10 }}>
-  {/* WAIVER BADGE */}
-  <div
-    style={{
-      background: "#16a34a",
-      color: "white",
-      fontWeight: 900,
-      fontSize: 11,
-      padding: "6px 10px",
-      borderRadius: 999,
-      display: "inline-block",
-      marginBottom: 8,
-    }}
-  >
-    SETUP FEE WAIVED BEFORE JULY 1
-  </div>
+            <div style={{ marginTop: 10 }}>
+              <div
+                style={{
+                  background: "#16a34a",
+                  color: "white",
+                  fontWeight: 900,
+                  fontSize: 11,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  display: "inline-block",
+                  marginBottom: 8,
+                }}
+              >
+                SETUP FEE WAIVED BEFORE JULY 1
+              </div>
 
-  {/* BUTTON (DIMMED) */}
-  <a
-    href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
-    target="_blank"
-    style={{
-      ...secondaryBtn,
-      background: "#f1f5f9",
-      color: "#64748b",
-      textDecoration: "line-through",
-      cursor: "not-allowed",
-      opacity: 0.7,
-    }}
-  >
-    Pay Setup Fee — $299
-  </a>
-</div>
+              <a
+                href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  ...secondaryBtn,
+                  background: "#f1f5f9",
+                  color: "#64748b",
+                  textDecoration: "line-through",
+                  cursor: "not-allowed",
+                  opacity: 0.7,
+                }}
+              >
+                Pay Setup Fee — $299
+              </a>
+            </div>
 
             <p
               style={{
@@ -391,7 +390,7 @@ export default function Page() {
           fontWeight: 800,
         }}
       >
-        Brenham CDJR • Powered by TradeDesk by Solace
+        Jersey Village CDJR • Powered by TradeDesk by Solace
       </footer>
     </main>
   );
