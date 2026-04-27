@@ -25,6 +25,10 @@ function getArray(value: unknown): string[] {
     : [];
 }
 
+function getNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -80,7 +84,7 @@ export async function POST(
 
     const valuePayload =
       intake.value_payload && typeof intake.value_payload === "object"
-        ? intake.value_payload
+        ? (intake.value_payload as Record<string, unknown>)
         : {};
 
     const summaryLines = getArray(valuePayload.summaryLines);
@@ -99,7 +103,8 @@ export async function POST(
       )
       .join("");
 
-    const offerAmount = intake.offer_amount ?? valuePayload.offerAmount ?? null;
+    const offerAmount =
+      getNumber(intake.offer_amount) ?? getNumber(valuePayload.offerAmount);
     const confidence = valuePayload.confidence || "Pending";
     const admissibility = valuePayload.admissibility || "Pending";
 
@@ -124,10 +129,8 @@ export async function POST(
 
         <hr />
 
-        <p><strong>VIN:</strong> ${escapeHtml(intake.vin || "Not detected")}</p>
-        <p><strong>Mileage:</strong> ${escapeHtml(
-          intake.mileage || "Not detected"
-        )}</p>
+        <p><strong>VIN:</strong> ${escapeHtml(intake.vin || "Not evidence-derived")}</p>
+        <p><strong>Mileage:</strong> ${escapeHtml(intake.mileage || "Not evidence-derived")}</p>
         <p><strong>Offer:</strong> ${escapeHtml(formatMoney(offerAmount))}</p>
         <p><strong>Confidence:</strong> ${escapeHtml(confidence)}</p>
         <p><strong>State:</strong> ${escapeHtml(admissibility)}</p>
@@ -136,9 +139,7 @@ export async function POST(
         <ul>
           ${
             summaryLines.length
-              ? summaryLines
-                  .map((line) => `<li>${escapeHtml(line)}</li>`)
-                  .join("")
+              ? summaryLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
               : "<li>No summary recorded.</li>"
           }
         </ul>
@@ -147,9 +148,7 @@ export async function POST(
         <ul>
           ${
             conditionNotes.length
-              ? conditionNotes
-                  .map((line) => `<li>${escapeHtml(line)}</li>`)
-                  .join("")
+              ? conditionNotes.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
               : "<li>No condition notes recorded.</li>"
           }
         </ul>
@@ -158,10 +157,8 @@ export async function POST(
         <ul>
           ${
             reviewNotes.length
-              ? reviewNotes
-                  .map((line) => `<li>${escapeHtml(line)}</li>`)
-                  .join("")
-              : "<li>Verify title, payoff, condition, VIN, mileage, and recall status before final paperwork.</li>"
+              ? reviewNotes.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
+              : "<li>Verify title, payoff, condition, evidence-derived VIN, evidence-derived mileage, and recall status before final paperwork.</li>"
           }
         </ul>
 
@@ -174,9 +171,7 @@ export async function POST(
 
     if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const from =
-        process.env.RESEND_FROM_EMAIL ||
-        "SolaceTrade <onboarding@resend.dev>";
+      const from = process.env.RESEND_FROM_EMAIL || "SolaceTrade <onboarding@resend.dev>";
 
       const { data, error } = await resend.emails.send({
         from,
@@ -215,9 +210,7 @@ export async function POST(
       },
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown submit error.";
-
+    const message = error instanceof Error ? error.message : "Unknown submit error.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
