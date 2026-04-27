@@ -27,7 +27,7 @@ const photoAliases: Record<RequiredPhotoStep, string[]> = {
   vin: ["vin", "vinPhoto", "vin_photo"],
 };
 
-function isUploadFile(value: FormDataEntryValue | null): value is UploadFile {
+function isUploadFile(value: unknown): value is UploadFile {
   return (
     typeof value === "object" &&
     value !== null &&
