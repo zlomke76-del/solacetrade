@@ -39,7 +39,9 @@ export default function Page() {
           zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: 14 }}>Brenham Chrysler Jeep Dodge Ram</strong>
+        <strong style={{ fontSize: 14 }}>
+          Brenham Chrysler Jeep Dodge Ram
+        </strong>
         <nav style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
           <span>New</span>
           <span>Used</span>
@@ -77,28 +79,42 @@ export default function Page() {
             TradeDesk by Solace
           </div>
 
+          {/* HEADLINE */}
           <h1
             style={{
-              margin: "0 auto 9px",
+              margin: "0 auto 10px",
               maxWidth: 780,
               fontSize: "clamp(34px, 6vw, 62px)",
               lineHeight: 0.95,
               letterSpacing: "-0.058em",
             }}
           >
-            Scan first. Get a cleaner trade value.
+            Get a cleaner trade value.
           </h1>
 
+          {/* ACTION LINE */}
+          <p
+            style={{
+              margin: "0 auto 6px",
+              maxWidth: 620,
+              color: "#0f172a",
+              fontSize: "clamp(16px, 2.2vw, 20px)",
+              fontWeight: 700,
+            }}
+          >
+            Scan your vehicle. Get an instant cash offer.
+          </p>
+
+          {/* TRUST LINE */}
           <p
             style={{
               margin: "0 auto 16px",
-              maxWidth: 620,
-              color: "#475569",
-              fontSize: "clamp(15px, 2vw, 18px)",
-              lineHeight: 1.42,
+              color: "#64748b",
+              fontSize: 14,
+              fontWeight: 600,
             }}
           >
-            Take five guided photos. Then Solace produces a preliminary value and asks what you want to do next.
+            No obligation. No pressure.
           </p>
 
           <a
@@ -132,14 +148,44 @@ export default function Page() {
               fontWeight: 800,
             }}
           >
-            <span style={{ padding: "7px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>5 guided photos</span>
-            <span style={{ padding: "7px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>VIN after scan</span>
-            <span style={{ padding: "7px 10px", borderRadius: 999, background: "white", border: "1px solid #e2e8f0" }}>Recall-ready review</span>
+            <span
+              style={{
+                padding: "7px 10px",
+                borderRadius: 999,
+                background: "white",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              5 guided photos
+            </span>
+            <span
+              style={{
+                padding: "7px 10px",
+                borderRadius: 999,
+                background: "white",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              VIN after scan
+            </span>
+            <span
+              style={{
+                padding: "7px 10px",
+                borderRadius: 999,
+                background: "white",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              Recall-ready review
+            </span>
           </div>
         </div>
       </section>
 
-      <section id="vehicle-scan" style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}>
+      <section
+        id="vehicle-scan"
+        style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}
+      >
         <TradeDesk mode="customer" />
       </section>
 
@@ -154,19 +200,57 @@ export default function Page() {
           }}
         >
           {[
-            ["Guided capture", "The customer sees one clear photo task at a time."],
-            ["Cleaner value", "VIN and mileage are requested only after the images are complete."],
-            ["Dealer-ready", "Solace produces the value response before asking the customer’s intent."],
+            [
+              "Guided capture",
+              "The customer sees one clear photo task at a time.",
+            ],
+            [
+              "Cleaner value",
+              "VIN and mileage are requested only after the images are complete.",
+            ],
+            [
+              "Dealer-ready",
+              "Solace produces the offer before asking the customer’s intent.",
+            ],
           ].map(([title, body]) => (
-            <div key={title} style={{ padding: 17, borderRadius: 21, background: "white", border: "1px solid #e2e8f0", boxShadow: "0 14px 36px rgba(15,23,42,0.06)" }}>
-              <strong style={{ display: "block", fontSize: 16 }}>{title}</strong>
-              <p style={{ margin: "7px 0 0", color: "#64748b", fontSize: 14, lineHeight: 1.45 }}>{body}</p>
+            <div
+              key={title}
+              style={{
+                padding: 17,
+                borderRadius: 21,
+                background: "white",
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
+              }}
+            >
+              <strong style={{ display: "block", fontSize: 16 }}>
+                {title}
+              </strong>
+              <p
+                style={{
+                  margin: "7px 0 0",
+                  color: "#64748b",
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                }}
+              >
+                {body}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
-      <footer style={{ padding: 22, background: "#0b0b0b", color: "white", textAlign: "center", fontSize: 13, fontWeight: 800 }}>
+      <footer
+        style={{
+          padding: 22,
+          background: "#0b0b0b",
+          color: "white",
+          textAlign: "center",
+          fontSize: 13,
+          fontWeight: 800,
+        }}
+      >
         Brenham CDJR • Powered by TradeDesk by Solace
       </footer>
     </main>
