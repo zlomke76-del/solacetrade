@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useMemo, useRef, useState } from "react";
 
 type TradeDeskMode = "customer" | "internal";
 
@@ -105,6 +105,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   const [customerName, setCustomerName] = useState("");
   const [managerNotes, setManagerNotes] = useState("");
   const [result, setResult] = useState<ResultState | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
   const capturedCount = Object.values(photos).filter(Boolean).length;
@@ -127,6 +128,8 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     if (!file || !currentStep) return;
+
+    setStarted(true);
 
     setPhotos((previous) => ({
       ...previous,
@@ -201,6 +204,16 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
     });
   }
 
+  function openCameraOrFilePicker() {
+    if (!started) {
+      setStarted(true);
+    }
+
+    window.setTimeout(() => {
+      fileInputRef.current?.click();
+    }, 0);
+  }
+
   function resetScan() {
     setStarted(false);
     setStepIndex(0);
@@ -222,7 +235,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         style={{
           position: "relative",
           display: "block",
-          minHeight: startMode ? 310 : 300,
+          minHeight: startMode ? 250 : 270,
           borderRadius: 18,
           overflow: "hidden",
           cursor: "pointer",
@@ -234,6 +247,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           type="file"
           accept="image/*"
           capture="environment"
+          ref={fileInputRef}
           onChange={handlePhoto}
           style={{ display: "none" }}
         />
@@ -244,7 +258,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           style={{
             width: "100%",
             height: "100%",
-            minHeight: startMode ? 310 : 300,
+            minHeight: startMode ? 250 : 270,
             display: "block",
             objectFit: "cover",
             filter: "brightness(0.72)",
@@ -314,8 +328,8 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         >
           <div
             style={{
-              width: 76,
-              height: 76,
+              width: 64,
+              height: 64,
               borderRadius: "50%",
               background: "rgba(255,255,255,0.92)",
               color: "#0f172a",
@@ -323,7 +337,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               placeItems: "center",
               boxShadow: "0 18px 42px rgba(0,0,0,0.34)",
               border: "1px solid rgba(255,255,255,0.7)",
-              fontSize: 34,
+              fontSize: 30,
               fontWeight: 800,
               lineHeight: 1,
             }}
@@ -342,11 +356,11 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           }}
         >
           <strong style={{ display: "block", fontSize: 15 }}>
-            {startMode ? "Start with a few guided photos" : currentStep.label}
+            {startMode ? "Tap to open camera" : currentStep.label}
           </strong>
           <span style={{ display: "block", marginTop: 4, fontSize: 13, opacity: 0.86 }}>
             {startMode
-              ? "Front, side, rear, interior, odometer, and VIN."
+              ? "On desktop, this opens a file picker instead."
               : `Tap to capture the ${currentStep.label.toLowerCase()}.`}
           </span>
         </div>
@@ -393,8 +407,8 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           {isInternal ? "Internal Manager Routing" : "Vehicle Scan Active"}
         </div>
 
-        <h2 style={{ margin: "14px 0 8px", fontSize: 30, letterSpacing: "-0.035em" }}>
-          {isInternal ? "Build the manager evaluation packet." : "Your car is the application."}
+        <h2 style={{ margin: "14px 0 8px", fontSize: 28, letterSpacing: "-0.035em" }}>
+          {isInternal ? "Build the manager evaluation packet." : "Start your vehicle scan."}
         </h2>
 
         <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.55 }}>
@@ -415,22 +429,22 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         >
           {renderCapturePreview({ startMode: true })}
 
-          <div style={{ padding: "18px 4px 2px", textAlign: "center" }}>
-            <h3 style={{ margin: "0 0 6px", fontSize: 20 }}>
-              {isInternal ? "Start sales-floor evaluation" : "Start vehicle scan"}
+          <div style={{ padding: "14px 4px 0", textAlign: "center" }}>
+            <h3 style={{ margin: "0 0 5px", fontSize: 18 }}>
+              {isInternal ? "Start sales-floor evaluation" : "Capture the first photo."}
             </h3>
-            <p style={{ margin: "0 auto 14px", maxWidth: 520, color: "#475569", lineHeight: 1.55 }}>
+            <p style={{ margin: "0 auto 12px", maxWidth: 480, color: "#475569", lineHeight: 1.45, fontSize: 14 }}>
               {isInternal
                 ? "Designed for consultants capturing a trade while the customer is at the dealership."
-                : "We’ll guide each photo so Brenham CDJR receives a cleaner vehicle file for review."}
+                : "Open the camera first. We’ll guide the rest of the vehicle file step by step."}
             </p>
 
             <button
               type="button"
-              onClick={() => setStarted(true)}
+              onClick={openCameraOrFilePicker}
               style={{
                 width: "100%",
-                padding: 15,
+                padding: 13,
                 background: isInternal ? "#0f172a" : "#b91c1c",
                 color: "white",
                 border: "none",
@@ -440,7 +454,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
                 cursor: "pointer",
               }}
             >
-              {isInternal ? "Start Internal Evaluation" : "Start Vehicle Scan"}
+              {isInternal ? "Start Internal Evaluation" : "Open Camera"}
             </button>
           </div>
         </div>
