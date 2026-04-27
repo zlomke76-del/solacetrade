@@ -131,7 +131,7 @@ export async function POST(
       .from("trade_intakes")
       .insert({
         dealer_id: dealer.id,
-        status: "uploaded",
+        status: "scanned",
         mode,
         customer_name: customerName || null,
         customer_contact: customerContact || null,
