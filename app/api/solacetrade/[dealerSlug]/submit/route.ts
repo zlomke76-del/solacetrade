@@ -44,6 +44,133 @@ function formatMileage(value: unknown) {
   }).format(number);
 }
 
+function cleanVehicleLookupPart(value: unknown) {
+  const text = String(value || "")
+    .replace(/[^a-zA-Z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text || null;
+}
+
+type NhtsaRecall = {
+  Manufacturer?: string;
+  NHTSACampaignNumber?: string;
+  Component?: string;
+  Summary?: string;
+  Consequence?: string;
+  Remedy?: string;
+  ReportReceivedDate?: string;
+};
+
+async function fetchNhtsaRecalls({
+  year,
+  make,
+  model,
+}: {
+  year: unknown;
+  make: unknown;
+  model: unknown;
+}) {
+  const safeYear = cleanVehicleLookupPart(year);
+  const safeMake = cleanVehicleLookupPart(make);
+  const safeModel = cleanVehicleLookupPart(model);
+
+  if (!safeYear || !safeMake || !safeModel) {
+    return {
+      checked: false,
+      recalls: [] as NhtsaRecall[],
+      error: "Vehicle year, make, or model was unavailable for recall lookup.",
+    };
+  }
+
+  try {
+    const params = new URLSearchParams({
+      make: safeMake,
+      model: safeModel,
+      modelYear: safeYear,
+    });
+
+    const response = await fetch(
+      `https://api.nhtsa.gov/recalls/recallsByVehicle?${params.toString()}`,
+      { cache: "no-store" }
+    );
+
+    if (!response.ok) {
+      return {
+        checked: false,
+        recalls: [] as NhtsaRecall[],
+        error: `NHTSA recall lookup failed with status ${response.status}.`,
+      };
+    }
+
+    const json = (await response.json().catch(() => ({}))) as {
+      results?: NhtsaRecall[];
+      Results?: NhtsaRecall[];
+    };
+
+    const recalls = Array.isArray(json.results)
+      ? json.results
+      : Array.isArray(json.Results)
+        ? json.Results
+        : [];
+
+    return { checked: true, recalls, error: null as string | null };
+  } catch (error) {
+    return {
+      checked: false,
+      recalls: [] as NhtsaRecall[],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown NHTSA recall lookup error.",
+    };
+  }
+}
+
+function getRecallSummary({
+  checked,
+  recallCount,
+  error,
+}: {
+  checked: boolean;
+  recallCount: number;
+  error: string | null;
+}) {
+  if (!checked) {
+    return error
+      ? `Recall check unavailable: ${error}`
+      : "Recall check unavailable for this vehicle configuration.";
+  }
+
+  if (recallCount === 0) {
+    return "No applicable recalls were found for this year, make, and model in the NHTSA database.";
+  }
+
+  return `${recallCount} applicable recall(s) found for this year, make, and model. Dealer must verify open/unrepaired status by VIN.`;
+}
+
+function renderRecallItems(recalls: NhtsaRecall[]) {
+  if (!recalls.length) return "";
+
+  return recalls
+    .slice(0, 5)
+    .map((recall) => {
+      const campaign = recall.NHTSACampaignNumber
+        ? `Campaign ${escapeHtml(recall.NHTSACampaignNumber)}`
+        : "Recall";
+      const component = recall.Component
+        ? ` · ${escapeHtml(recall.Component)}`
+        : "";
+      const summary = recall.Summary
+        ? `<div style="margin-top:4px;color:#475569;">${escapeHtml(recall.Summary)}</div>`
+        : "";
+
+      return `<li style="margin-bottom:10px;"><strong>${campaign}${component}</strong>${summary}</li>`;
+    })
+    .join("");
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -133,12 +260,16 @@ export async function POST(
     const confidence = valuePayload.confidence || "Pending";
     const admissibility = valuePayload.admissibility || "Pending";
     const certificateId = generateCertificateId();
-    const vehicleLabel = [
-      valuePayload.vehicleYear ?? valuePayload.year ?? valuePayload.vehicle?.year,
-      valuePayload.vehicleMake ?? valuePayload.make ?? valuePayload.vehicle?.make,
-      valuePayload.vehicleModel ?? valuePayload.model ?? valuePayload.vehicle?.model,
-      valuePayload.vehicleTrim ?? valuePayload.trim ?? valuePayload.vehicle?.trim,
-    ]
+    const vehicleYear =
+      valuePayload.vehicleYear ?? valuePayload.year ?? valuePayload.vehicle?.year;
+    const vehicleMake =
+      valuePayload.vehicleMake ?? valuePayload.make ?? valuePayload.vehicle?.make;
+    const vehicleModel =
+      valuePayload.vehicleModel ?? valuePayload.model ?? valuePayload.vehicle?.model;
+    const vehicleTrim =
+      valuePayload.vehicleTrim ?? valuePayload.trim ?? valuePayload.vehicle?.trim;
+
+    const vehicleLabel = [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
       .filter(Boolean)
       .join(" ")
       .replace(/\s+/g, " ")
@@ -152,6 +283,20 @@ export async function POST(
     const vin =
       intake.vin || valuePayload.detectedVin || valuePayload.vin || "Not detected";
     const intentLabel = customerIntent || intake.customer_intent || "Not selected";
+
+    const recallResult = await fetchNhtsaRecalls({
+      year: vehicleYear,
+      make: vehicleMake,
+      model: vehicleModel,
+    });
+    const recallCount = recallResult.recalls.length;
+    const recallSummary = getRecallSummary({
+      checked: recallResult.checked,
+      recallCount,
+      error: recallResult.error,
+    });
+    const recallItemsHtml = renderRecallItems(recallResult.recalls);
+
     const from =
       process.env.RESEND_FROM_EMAIL || "SolaceTrade <onboarding@resend.dev>";
     const customerSubject = `Your Trade Certificate – ${formatMoney(offerAmount)}`;
@@ -193,6 +338,11 @@ export async function POST(
 
               <div style="margin-top:16px;font-size:14px;color:#334155;">
                 ${escapeHtml(customerName)}, your trade certificate has been created and routed to ${escapeHtml(dealer.name)} for verification.
+              </div>
+
+              <div style="margin-top:16px;padding:12px;border-radius:14px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:13px;">
+                <strong>Recall check</strong><br />
+                ${escapeHtml(recallSummary)}
               </div>
 
               <div style="margin-top:16px;padding:12px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px;">
@@ -249,6 +399,12 @@ export async function POST(
 
               <div style="margin-top:18px;text-align:center;">
                 <a href="mailto:${escapeHtml(customerContact)}?subject=${encodeURIComponent(`Your trade certificate from ${dealer.name}`)}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#ffffff;border-radius:12px;text-decoration:none;font-weight:900;">Email Customer</a>
+              </div>
+
+              <div style="margin-top:18px;padding:14px;border-radius:16px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;">
+                <h3 style="margin:0 0 8px;font-size:15px;">Recall check</h3>
+                <p style="margin:0;color:#1e3a8a;font-size:13px;">${escapeHtml(recallSummary)}</p>
+                ${recallItemsHtml ? `<ul style="margin:10px 0 0;padding-left:18px;color:#334155;font-size:12px;">${recallItemsHtml}</ul>` : ""}
               </div>
 
               <div style="margin-top:18px;">
@@ -322,6 +478,11 @@ export async function POST(
         },
         customerEmailId,
         dealerEmailId,
+        recall: {
+          checked: recallResult.checked,
+          count: recallCount,
+          error: recallResult.error,
+        },
         resendEnabled: Boolean(process.env.RESEND_API_KEY),
       },
     });
@@ -333,6 +494,10 @@ export async function POST(
       customerEmailId,
       dealerEmailId,
       certificateId,
+      recall: {
+        checked: recallResult.checked,
+        count: recallCount,
+      },
       dealer: {
         name: dealer.name,
         leadEmail: dealer.lead_email,
