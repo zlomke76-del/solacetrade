@@ -9,6 +9,8 @@ type TradeDeskProps = {
   mode?: TradeDeskMode;
   dealerName?: string;
   brandColor?: string;
+  managerEmail?: string;
+  routingCcEmails?: string[];
 };
 
 type CaptureStep = {
@@ -275,6 +277,8 @@ export default function TradeDesk({
   mode = "customer",
   dealerName = "your dealer",
   brandColor = "#b91c1c",
+  managerEmail = "",
+  routingCcEmails = [],
 }: TradeDeskProps) {
   const isInternal = mode === "internal";
   const red = brandColor || "#b91c1c";
@@ -284,7 +288,7 @@ export default function TradeDesk({
   const [photos, setPhotos] = useState<PhotoMap>(() => emptyPhotos());
   const [vin, setVin] = useState("");
   const [mileage, setMileage] = useState("");
-  const [contact, setContact] = useState("");
+  const [contact, setContact] = useState(managerEmail || "");
   const [salesperson, setSalesperson] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [dealNumber, setDealNumber] = useState("");
@@ -552,7 +556,7 @@ export default function TradeDesk({
     setPhotos(emptyPhotos());
     setVin("");
     setMileage("");
-    setContact("");
+    setContact(managerEmail || "");
     setSalesperson("");
     setCustomerName("");
     setDealNumber("");
@@ -1390,7 +1394,7 @@ export default function TradeDesk({
                   Route packet for manager approval
                 </strong>
                 <p style={{ margin: "4px 0 10px", color: muted, fontSize: 13 }}>
-                  Confirm the customer, deal number, and used car manager email.
+                  Confirm the customer and deal number. Manager routing is loaded from the dealer admin record.
                 </p>
                 <div
                   style={{
@@ -1411,12 +1415,35 @@ export default function TradeDesk({
                     onChange={(event) => setDealNumber(event.target.value)}
                     style={inputStyle()}
                   />
-                  <input
-                    placeholder="Used car manager email"
-                    value={contact}
-                    onChange={(event) => setContact(event.target.value)}
-                    style={inputStyle()}
-                  />
+                  {managerEmail ? (
+                    <div
+                      style={{
+                        padding: 12,
+                        borderRadius: 15,
+                        background: "white",
+                        border: "1px solid #e2e8f0",
+                        color: dark,
+                        fontSize: 13,
+                      }}
+                    >
+                      <strong style={{ display: "block" }}>Used car manager routing</strong>
+                      <span style={{ display: "block", marginTop: 4, color: muted }}>
+                        Primary: {managerEmail}
+                      </span>
+                      {routingCcEmails.length > 0 ? (
+                        <span style={{ display: "block", marginTop: 4, color: muted }}>
+                          CC: {routingCcEmails.join(", ")}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <input
+                      placeholder="Used car manager email"
+                      value={contact}
+                      onChange={(event) => setContact(event.target.value)}
+                      style={inputStyle()}
+                    />
+                  )}
                 </div>
               </div>
             )}
