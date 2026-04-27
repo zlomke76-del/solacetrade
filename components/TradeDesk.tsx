@@ -250,8 +250,8 @@ function getValueVehicleLabel(value: SolaceValue | null) {
     .trim();
 }
 
-function hasContact(value: string) {
-  return value.trim().length >= 7;
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function formatIntakeError(errorBody: IntakeErrorBody) {
@@ -309,7 +309,7 @@ export default function TradeDesk({
   const canSubmitVehicleFile =
     Boolean(value) &&
     customerName.trim().length > 0 &&
-    hasContact(contact) &&
+    isValidEmail(contact) &&
     customerIntent.trim().length > 0;
 
   const missingPhotoLabels = useMemo(() => {
@@ -458,8 +458,8 @@ export default function TradeDesk({
       return;
     }
 
-    if (!hasContact(contact)) {
-      setErrorMessage("Enter a phone number or email before sending the vehicle file.");
+    if (!isValidEmail(contact)) {
+      setErrorMessage("Enter a valid email to receive your trade certificate.");
       return;
     }
 
@@ -489,8 +489,8 @@ export default function TradeDesk({
 
       setStatusMessage(
         json.emailed
-          ? `Vehicle file sent to ${json.dealer.name}.`
-          : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active."
+          ? `Trade certificate sent to ${contact.trim()}.`
+          : "Trade certificate saved. Email is disabled until RESEND_API_KEY is active."
       );
     } catch (error) {
       setErrorMessage(
@@ -1250,10 +1250,10 @@ export default function TradeDesk({
                 }}
               >
                 <strong style={{ display: "block", fontSize: 15 }}>
-                  Where should we send your offer?
+                  Where should we send your trade certificate?
                 </strong>
                 <p style={{ margin: "4px 0 10px", color: muted, fontSize: 13 }}>
-                  Enter your name and either a phone number or email.
+                  We’ll send your certificate and verify it with the dealer.
                 </p>
                 <div
                   style={{
@@ -1269,7 +1269,7 @@ export default function TradeDesk({
                     style={inputStyle()}
                   />
                   <input
-                    placeholder="Phone number or email"
+                    placeholder="Email address"
                     value={contact}
                     onChange={(event) => setContact(event.target.value)}
                     style={inputStyle()}
@@ -1313,8 +1313,8 @@ export default function TradeDesk({
               {isInternal
                 ? "Route to Used Car Manager"
                 : canSubmitVehicleFile
-                  ? "Send to your dealer"
-                  : "Add contact details to send"}
+                  ? "Get my trade certificate"
+                  : "Add name, email, and next step"}
             </button>
 
             <button
