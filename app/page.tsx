@@ -33,47 +33,32 @@ export default function Page() {
 
       {/* HERO */}
       <section style={{
-        padding: "60px 20px",
+        padding: "70px 20px",
         background: "#f7f7f7",
         textAlign: "center"
       }}>
-        <h1 style={{ fontSize: 36, marginBottom: 10 }}>
-          Get a Real Cash Offer for Your Vehicle
+        <h1 style={{ fontSize: 38, marginBottom: 10 }}>
+          Scan Your Vehicle for Recalls & Trade Value
         </h1>
 
         <p style={{ fontSize: 18, marginBottom: 20 }}>
-          Take a few photos. Enter VIN & mileage. Get your offer instantly.
+          Take live photos. TradeDesk checks VIN, mileage, recall status, and condition.
         </p>
 
-        <button style={{
-          padding: "14px 28px",
-          background: "#b91c1c",
-          color: "white",
-          border: "none",
-          borderRadius: 6,
-          fontSize: 16
-        }}>
-          Start Trade-In
-        </button>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={chip}>Live photo scan</span>
+          <span style={chip}>Recall check</span>
+          <span style={chip}>Instant value</span>
+        </div>
       </section>
 
       {/* TRADEDESK */}
       <section style={{
-        maxWidth: 800,
+        maxWidth: 720,
         margin: "40px auto",
         padding: 20
       }}>
         <TradeDesk />
-      </section>
-
-      {/* TRUST */}
-      <section style={{
-        padding: 40,
-        background: "#fafafa",
-        textAlign: "center"
-      }}>
-        <h2>Why Trade with Brenham CDJR?</h2>
-        <p>Fast offers. Local experts. No guessing.</p>
       </section>
 
       {/* FOOTER */}
@@ -88,3 +73,10 @@ export default function Page() {
     </main>
   );
 }
+
+const chip = {
+  background: "#e5e7eb",
+  padding: "6px 12px",
+  borderRadius: 20,
+  fontSize: 13
+};
