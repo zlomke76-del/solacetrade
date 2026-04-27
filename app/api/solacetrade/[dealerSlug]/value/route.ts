@@ -36,6 +36,39 @@ type DecodedVehicle = {
   trim: string | null;
 };
 
+type ExtendedSolaceValuePayload = {
+  offerAmount: number | null;
+  offerRangeLow: number | null;
+  offerRangeHigh: number | null;
+  title?: string | null;
+  confidence?: "Low" | "Medium" | "High";
+  admissibility?: "PASS" | "PARTIAL" | "DENY";
+  summaryLines?: string[];
+  conditionNotes?: string[];
+  missingItems?: string[];
+  dealerReviewNotes?: string[];
+  detectedVin?: string | null;
+  detectedMileage?: string | number | null;
+  vin?: string | null;
+  mileage?: string | number | null;
+  vehicleYear?: string | number | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleTrim?: string | null;
+  year?: string | number | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+  vehicle?: {
+    vin?: string | null;
+    mileage?: string | number | null;
+    year?: string | number | null;
+    make?: string | null;
+    model?: string | null;
+    trim?: string | null;
+  } | null;
+};
+
 const gatewayUrl = "https://ai-gateway.vercel.sh/v1/chat/completions";
 
 function getGatewayKey() {
@@ -363,7 +396,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     }
 
     const rawText = extractMessageText(gatewayJson);
-    const parsed = parseSolaceValue(safeJsonText(rawText));
+    const parsed = parseSolaceValue(safeJsonText(rawText)) as ExtendedSolaceValuePayload;
 
     const detectedVin = cleanVin(
       parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
