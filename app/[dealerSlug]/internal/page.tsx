@@ -1,96 +1,137 @@
-"use client";
-
+import { notFound } from "next/navigation";
 import TradeDesk from "../../../components/TradeDesk";
+import { getDealerBySlug, formatDealerPhoneLine } from "@/lib/solacetrade";
 
-type InternalTradeDeskPageProps = {
+type InternalPageProps = {
   params: {
     dealerSlug: string;
   };
 };
 
-function formatDealerName(slug: string) {
-  return slug
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+const defaultBrandColor = "#b91c1c";
+
+export async function generateMetadata({ params }: InternalPageProps) {
+  try {
+    const dealer = await getDealerBySlug(params.dealerSlug);
+    return {
+      title: `${dealer.name} Internal TradeDesk | SolaceTrade`,
+    };
+  } catch {
+    return {
+      title: "Internal TradeDesk | SolaceTrade",
+    };
+  }
 }
 
-export default function InternalTradeDeskPage({
-  params,
-}: InternalTradeDeskPageProps) {
-  const dealerSlug = params.dealerSlug;
-  const dealerName = formatDealerName(dealerSlug);
+export default async function DealerInternalPage({ params }: InternalPageProps) {
+  let dealer;
+
+  try {
+    dealer = await getDealerBySlug(params.dealerSlug);
+  } catch {
+    notFound();
+  }
+
+  const brandColor = dealer.brand_color || defaultBrandColor;
+  const salesLine = formatDealerPhoneLine(dealer);
 
   return (
     <main
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(circle at top left, rgba(59,130,246,0.18), transparent 34%), #0f172a",
+          "radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12), transparent 34%), #f4f6f8",
         color: "#0f172a",
         fontFamily: "Arial, Helvetica, sans-serif",
-        padding: "18px",
       }}
     >
-      <section
+      <div
         style={{
-          maxWidth: 900,
-          margin: "0 auto 18px",
+          background: "#0b0b0b",
           color: "white",
+          padding: "8px 16px",
+          fontSize: 13,
+          fontWeight: 800,
+          textAlign: "center",
         }}
       >
+        Internal TradeDesk • {dealer.name} • {salesLine}
+      </div>
+
+      <header
+        style={{
+          background: "rgba(255,255,255,0.94)",
+          backdropFilter: "blur(14px)",
+          borderBottom: "1px solid #e5e7eb",
+          padding: "12px 18px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+        }}
+      >
+        <strong style={{ fontSize: 14 }}>{dealer.name}</strong>
+        <nav style={{ display: "flex", gap: 14, fontSize: 13, fontWeight: 900 }}>
+          <a href={`/${dealer.slug}`} style={{ color: "#334155", textDecoration: "none" }}>
+            Customer View
+          </a>
+          <span style={{ color: brandColor }}>Internal</span>
+        </nav>
+      </header>
+
+      <section style={{ maxWidth: 760, margin: "0 auto", padding: "28px 14px 42px" }}>
         <div
           style={{
-            display: "inline-flex",
-            padding: "7px 12px",
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.12)",
-            fontSize: 12,
-            fontWeight: 900,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
             marginBottom: 14,
+            padding: 14,
+            borderRadius: 22,
+            background: "white",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 16px 42px rgba(15,23,42,0.07)",
           }}
         >
-          Internal Trade Desk
+          <div
+            style={{
+              display: "inline-flex",
+              padding: "7px 10px",
+              borderRadius: 999,
+              background: "#e0f2fe",
+              color: "#075985",
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              marginBottom: 10,
+            }}
+          >
+            Salesperson Intake
+          </div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: "clamp(28px, 5vw, 46px)",
+              lineHeight: 0.98,
+              letterSpacing: "-0.055em",
+            }}
+          >
+            Build the manager review packet.
+          </h1>
+          <p style={{ margin: "8px 0 0", color: "#64748b", lineHeight: 1.5 }}>
+            Capture the five required vehicle photos. Packets route to the saved used car manager
+            configuration for this dealer.
+          </p>
         </div>
 
-        <h1
-          style={{
-            margin: "0 0 8px",
-            fontSize: "clamp(32px, 6vw, 56px)",
-            lineHeight: 0.96,
-            letterSpacing: "-0.055em",
-          }}
-        >
-          Sales-floor trade packet.
-        </h1>
-
-        <p
-          style={{
-            margin: 0,
-            maxWidth: 740,
-            color: "#cbd5e1",
-            lineHeight: 1.6,
-          }}
-        >
-          Capture five vehicle photos, attach the customer name and deal number,
-          then route the packet to the used car manager for review and approval.
-        </p>
-
-        <p
-          style={{
-            margin: "10px 0 0",
-            color: "#94a3b8",
-            fontSize: 13,
-            fontWeight: 800,
-          }}
-        >
-          Dealer: {dealerName}
-        </p>
-      </section>
-
-      <section style={{ maxWidth: 900, margin: "0 auto", paddingBottom: 36 }}>
-        <TradeDesk mode="internal" dealerSlug={dealerSlug} />
+        <TradeDesk
+          mode="internal"
+          dealerSlug={dealer.slug}
+          dealerName={dealer.name}
+          brandColor={brandColor}
+          managerEmail={dealer.lead_email}
+          routingCcEmails={dealer.routing_cc_emails || []}
+        />
       </section>
     </main>
   );
