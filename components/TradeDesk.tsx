@@ -356,47 +356,87 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
 
               <p style={{ margin: "0 0 16px", color: "#475569" }}>{currentStep.help}</p>
 
-              <label
-                style={{
-                  display: "block",
-                  padding: 28,
-                  border: "2px dashed #cbd5e1",
-                  borderRadius: 16,
-                  background: "#f8fafc",
-                  textAlign: "center",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhoto}
-                  style={{ display: "none" }}
-                />
+<label
+  style={{
+    position: "relative",
+    display: "block",
+    borderRadius: 16,
+    overflow: "hidden",
+    cursor: "pointer",
+  }}
+>
+  <input
+    type="file"
+    accept="image/*"
+    capture="environment"
+    onChange={handlePhoto}
+    style={{ display: "none" }}
+  />
 
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    margin: "0 auto 12px",
-                    borderRadius: 999,
-                    background: isInternal ? "#0f172a" : "#b91c1c",
-                    color: "white",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: 26,
-                    fontWeight: 900,
-                  }}
-                >
-                  +
-                </div>
+  {/* Background Image */}
+  <img
+    src="/images/vehicle_scan_01.png"
+    style={{
+      width: "100%",
+      height: 320,
+      objectFit: "cover",
+      filter: "brightness(0.75)",
+    }}
+  />
 
-                <strong>Open camera</strong>
-                <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>
-                  Tap to take the {currentStep.label.toLowerCase()} photo.
-                </p>
-              </label>
+  {/* Overlay */}
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      padding: 16,
+      color: "white",
+    }}
+  >
+    {/* Step */}
+    <div style={{ fontSize: 12, fontWeight: 900 }}>
+      Step {stepIndex + 1} of {captureSteps.length}
+    </div>
+
+    {/* Center Capture Button */}
+    <div
+      style={{
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 70,
+          height: 70,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.9)",
+          display: "grid",
+          placeItems: "center",
+          fontSize: 28,
+          fontWeight: 900,
+          color: "#0f172a",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+        }}
+      >
+        +
+      </div>
+    </div>
+
+    {/* Instruction */}
+    <div
+      style={{
+        fontSize: 13,
+        opacity: 0.9,
+      }}
+    >
+      Tap to capture the {currentStep.label.toLowerCase()}
+    </div>
+  </div>
+</label>
             </div>
 
             <div
