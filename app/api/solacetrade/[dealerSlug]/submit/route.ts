@@ -1,28 +1,29 @@
+"use server";
+
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   cleanText,
-  createSignedPhotoUrls,
   formatMoney,
   getDealerBySlug,
   logTradeEvent,
   SOLACETRADE_SCHEMA,
 } from "@/lib/solacetrade";
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function escapeHtml(value: unknown) {
   return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/>/g, "&gt;");
 }
 
-function getArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.map((item) => String(item || "").trim()).filter(Boolean)
-    : [];
+function generateCertificateId() {
+  return `TC-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 }
 
 export async function POST(
@@ -34,27 +35,27 @@ export async function POST(
     const dealer = await getDealerBySlug(dealerSlug);
     const body = await request.json().catch(() => ({}));
 
-    const intakeId = cleanText(body?.intakeId, 80);
-    const customerIntent = cleanText(body?.customerIntent, 80);
-    const customerContact = cleanText(body?.contact, 180);
-    const customerName = cleanText(body?.customerName, 160);
+    const intakeId = cleanText(body.intakeId, 80);
+    const customerName = cleanText(body.customerName, 160);
+    const email = cleanText(body.contact, 180);
+    const intent = cleanText(body.customerIntent, 80);
 
     if (!intakeId) {
       return NextResponse.json({ error: "Missing intakeId." }, { status: 400 });
     }
 
     if (!customerName) {
-      return NextResponse.json({ error: "Name is required." }, { status: 400 });
+      return NextResponse.json({ error: "Name required." }, { status: 400 });
     }
 
-    if (!customerContact) {
+    if (!isValidEmail(email)) {
       return NextResponse.json(
-        { error: "Provide either a phone number or email address." },
+        { error: "Valid email required." },
         { status: 400 }
       );
     }
 
-    const { data: intake, error: intakeError } = await supabaseAdmin
+    const { data: intake } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
       .select("*")
@@ -62,128 +63,97 @@ export async function POST(
       .eq("dealer_id", dealer.id)
       .single();
 
-    if (intakeError || !intake) {
-      return NextResponse.json(
-        { error: intakeError?.message || "Trade intake not found." },
-        { status: 404 }
-      );
+    if (!intake) {
+      return NextResponse.json({ error: "Intake not found." }, { status: 404 });
     }
 
-    const updatePayload = {
-      status: "submitted",
-      customer_intent: customerIntent || intake.customer_intent || null,
-      customer_contact: customerContact,
-      customer_name: customerName,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    const certificateId = generateCertificateId();
 
-    const { error: updateError } = await supabaseAdmin
-      .schema(SOLACETRADE_SCHEMA)
-      .from("trade_intakes")
-      .update(updatePayload)
-      .eq("id", intake.id)
-      .eq("dealer_id", dealer.id);
+    const offer =
+      intake.offer_amount ||
+      intake.value_payload?.offerAmount ||
+      null;
 
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    const valuePayload =
-      intake.value_payload && typeof intake.value_payload === "object"
-        ? intake.value_payload
-        : {};
-
-    const summaryLines = getArray(valuePayload.summaryLines);
-    const reviewNotes = getArray(valuePayload.dealerReviewNotes);
-    const conditionNotes = getArray(valuePayload.conditionNotes);
-
-    const signedPhotos = await createSignedPhotoUrls(
-      Array.isArray(intake.photo_paths) ? intake.photo_paths : []
-    );
-
-    const photoLinks = signedPhotos
-      .map((photo, index) =>
-        photo.signedUrl
-          ? `<li><a href="${escapeHtml(photo.signedUrl)}">Photo ${index + 1}</a></li>`
-          : `<li>${escapeHtml(photo.path)}</li>`
-      )
-      .join("");
-
-    const offerAmount = intake.offer_amount ?? valuePayload.offerAmount ?? null;
-    const confidence = valuePayload.confidence || "Pending";
-    const admissibility = valuePayload.admissibility || "Pending";
-
-    const subject = `SolaceTrade lead: ${dealer.name} ${intake.vin || "vehicle file"}`;
+    const vehicleLabel = [
+      intake.value_payload?.vehicleYear,
+      intake.value_payload?.vehicleMake,
+      intake.value_payload?.vehicleModel,
+      intake.value_payload?.vehicleTrim,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     const html = `
-      <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5">
-        <h2>New SolaceTrade vehicle file</h2>
-        <p><strong>Dealer:</strong> ${escapeHtml(dealer.name)}</p>
-        <p><strong>Customer:</strong> ${escapeHtml(customerName)}</p>
-        <p><strong>Contact:</strong> ${escapeHtml(customerContact)}</p>
-        <p><strong>Intent:</strong> ${escapeHtml(customerIntent || intake.customer_intent || "Not selected")}</p>
-        <hr />
-        <p><strong>VIN:</strong> ${escapeHtml(intake.vin || "Not detected")}</p>
-        <p><strong>Mileage:</strong> ${escapeHtml(intake.mileage || "Not detected")}</p>
-        <p><strong>Offer:</strong> ${escapeHtml(formatMoney(offerAmount))}</p>
-        <p><strong>Confidence:</strong> ${escapeHtml(confidence)}</p>
-        <p><strong>State:</strong> ${escapeHtml(admissibility)}</p>
-        <h3>Solace summary</h3>
-        <ul>${summaryLines.length ? summaryLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>No summary recorded.</li>"}</ul>
-        <h3>Condition notes</h3>
-        <ul>${conditionNotes.length ? conditionNotes.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>No condition notes recorded.</li>"}</ul>
-        <h3>Dealer review notes</h3>
-        <ul>${reviewNotes.length ? reviewNotes.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>Verify title, payoff, condition, VIN, mileage, and recall status before final paperwork.</li>"}</ul>
-        <h3>Photos</h3>
-        <ul>${photoLinks || "<li>No photo links available.</li>"}</ul>
+      <div style="font-family:Arial;padding:24px;background:#f4f6f8;">
+        <div style="max-width:520px;margin:auto;background:#fff;padding:24px;border-radius:16px;">
+          
+          <div style="font-size:12px;text-transform:uppercase;color:#64748b;font-weight:700;">
+            Trade Certificate
+          </div>
+
+          <h2 style="margin:8px 0;">${formatMoney(offer)}</h2>
+
+          <p style="color:#334155;">
+            ${escapeHtml(vehicleLabel || "Vehicle")}
+          </p>
+
+          <hr style="margin:16px 0;" />
+
+          <p><strong>Certificate ID:</strong> ${certificateId}</p>
+          <p><strong>Status:</strong> Pending dealer verification</p>
+          <p><strong>Valid for:</strong> 72 hours</p>
+
+          <div style="margin-top:20px;font-size:13px;color:#475569;">
+            This is a preliminary trade offer based on your submission.
+          </div>
+
+        </div>
       </div>
     `;
 
-    let emailId: string | null = null;
+    let emailed = false;
 
     if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const from = process.env.RESEND_FROM_EMAIL || "SolaceTrade <onboarding@resend.dev>";
 
-      const { data, error } = await resend.emails.send({
-        from,
-        to: [dealer.lead_email],
-        subject,
+      await resend.emails.send({
+        from: "SolaceTrade <offers@yourdomain.com>",
+        to: [email, dealer.lead_email],
+        subject: `Your Trade Certificate – ${formatMoney(offer)}`,
         html,
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      emailId = data?.id || null;
+      emailed = true;
     }
+
+    await supabaseAdmin
+      .schema(SOLACETRADE_SCHEMA)
+      .from("trade_intakes")
+      .update({
+        status: "submitted",
+        customer_name: customerName,
+        customer_contact: email,
+        customer_intent: intent,
+        certificate_id: certificateId,
+      })
+      .eq("id", intakeId);
 
     await logTradeEvent({
       dealerId: dealer.id,
-      intakeId: intake.id,
-      eventType: "intake_submitted",
-      payload: {
-        customerIntent,
-        emailedTo: dealer.lead_email,
-        emailId,
-        resendEnabled: Boolean(process.env.RESEND_API_KEY),
-      },
+      intakeId,
+      eventType: "certificate_sent",
+      payload: { email, certificateId },
     });
 
     return NextResponse.json({
       ok: true,
-      intakeId: intake.id,
-      emailed: Boolean(emailId),
-      emailId,
-      dealer: {
-        name: dealer.name,
-        leadEmail: dealer.lead_email,
-      },
+      emailed,
+      certificateId,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown submit error.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Submit failed." },
+      { status: 500 }
+    );
   }
 }
