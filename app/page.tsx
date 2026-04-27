@@ -186,7 +186,7 @@ export default function Page() {
         id="vehicle-scan"
         style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}
       >
-        <TradeDesk mode="customer" />
+        <TradeDesk mode="customer" dealerSlug="brenhamcdjr" />
       </section>
 
       <section style={{ padding: "24px 18px 38px" }}>
