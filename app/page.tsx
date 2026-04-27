@@ -12,7 +12,6 @@ export default function Page() {
         fontFamily: "Arial, Helvetica, sans-serif",
       }}
     >
-      {/* TOP BAR */}
       <div
         style={{
           background: "#0b0b0b",
@@ -26,7 +25,6 @@ export default function Page() {
         Sales: (979) 451-6727 • 1880 US-290, Brenham, TX
       </div>
 
-      {/* HEADER */}
       <header
         style={{
           background: "rgba(255,255,255,0.94)",
@@ -41,9 +39,7 @@ export default function Page() {
           zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: 14 }}>
-          Brenham Chrysler Jeep Dodge Ram
-        </strong>
+        <strong style={{ fontSize: 14 }}>Brenham Chrysler Jeep Dodge Ram</strong>
         <nav style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
           <span>New</span>
           <span>Used</span>
@@ -52,59 +48,124 @@ export default function Page() {
         </nav>
       </header>
 
-      {/* HERO */}
-      <section style={{ padding: "34px 18px 16px", textAlign: "center" }}>
-        <h1
-          style={{
-            fontSize: "clamp(34px, 6vw, 62px)",
-            marginBottom: 10,
-          }}
-        >
-          Get a cleaner trade value.
-        </h1>
+      <section
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          padding: "34px 18px 16px",
+          background:
+            "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.13), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%)",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "7px 12px",
+              borderRadius: 999,
+              background: "#fee2e2",
+              color: "#991b1b",
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              marginBottom: 12,
+            }}
+          >
+            TradeDesk by Solace
+          </div>
 
-        <p style={{ fontWeight: 700 }}>
-          Scan your vehicle. Get an instant cash offer.
-        </p>
+          <h1
+            style={{
+              margin: "0 auto 10px",
+              maxWidth: 780,
+              fontSize: "clamp(34px, 6vw, 62px)",
+              lineHeight: 0.95,
+              letterSpacing: "-0.058em",
+            }}
+          >
+            Get a cleaner trade value.
+          </h1>
 
-        <a
-          href="#vehicle-scan"
-          style={{
-            display: "inline-block",
-            marginTop: 16,
-            padding: "14px 21px",
-            borderRadius: 16,
-            background: "#b91c1c",
-            color: "white",
-            fontWeight: 900,
-            textDecoration: "none",
-          }}
-        >
-          Start Vehicle Scan
-        </a>
+          <p
+            style={{
+              margin: "0 auto 6px",
+              maxWidth: 620,
+              color: "#0f172a",
+              fontSize: "clamp(16px, 2.2vw, 20px)",
+              fontWeight: 700,
+            }}
+          >
+            Scan your vehicle. Get an instant cash offer.
+          </p>
+
+          <p
+            style={{
+              margin: "0 auto 16px",
+              color: "#64748b",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            No obligation. No pressure.
+          </p>
+
+          <a
+            href="#vehicle-scan"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "14px 21px",
+              borderRadius: 16,
+              background: "#b91c1c",
+              color: "white",
+              fontSize: 15,
+              fontWeight: 900,
+              textDecoration: "none",
+              boxShadow: "0 18px 42px rgba(185,28,28,0.24)",
+            }}
+          >
+            Start Vehicle Scan
+          </a>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: 8,
+              marginTop: 14,
+              color: "#334155",
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            <span style={heroPill}>5 guided photos</span>
+            <span style={heroPill}>VIN after scan</span>
+            <span style={heroPill}>Recall-ready review</span>
+          </div>
+        </div>
       </section>
 
-      {/* EXPERIENCE FIRST */}
       <section
         id="vehicle-scan"
-        style={{
-          maxWidth: 700,
-          margin: "0 auto",
-          padding: "0 14px 40px",
-        }}
+        style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}
       >
         <TradeDesk mode="customer" dealerSlug="brenhamcdjr" />
       </section>
 
-      {/* VALUE CARDS */}
-      <section style={{ padding: "30px 18px" }}>
+      <section style={{ padding: "24px 18px 38px" }}>
         <div
           style={{
             maxWidth: 900,
             margin: "0 auto",
             display: "grid",
             gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 14,
+            gap: 12,
           }}
         >
           {[
@@ -115,14 +176,22 @@ export default function Page() {
             <div
               key={title}
               style={{
-                padding: 18,
-                borderRadius: 20,
+                padding: 17,
+                borderRadius: 21,
                 background: "white",
                 border: "1px solid #e2e8f0",
+                boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
               }}
             >
-              <strong>{title}</strong>
-              <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
+              <strong style={{ display: "block", fontSize: 16 }}>{title}</strong>
+              <p
+                style={{
+                  margin: "7px 0 0",
+                  color: "#64748b",
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                }}
+              >
                 {body}
               </p>
             </div>
@@ -130,10 +199,9 @@ export default function Page() {
         </div>
       </section>
 
-      {/* 🔥 OLD FORMAT — MOVED TO BOTTOM */}
       <section
         style={{
-          padding: "40px 18px",
+          padding: "42px 18px",
           background: "#0f172a",
           color: "white",
         }}
@@ -143,100 +211,183 @@ export default function Page() {
             maxWidth: 900,
             margin: "0 auto",
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
             gap: 20,
+            alignItems: "stretch",
           }}
         >
-          {/* LEFT CARD */}
           <div
             style={{
               padding: 24,
-              borderRadius: 20,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 22,
+              background: "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 24px 70px rgba(0,0,0,0.28)",
             }}
           >
             <div
               style={{
-                fontSize: 12,
+                display: "inline-flex",
+                padding: "7px 10px",
+                borderRadius: 999,
+                background: "rgba(34,197,94,0.16)",
+                color: "#bbf7d0",
+                fontSize: 11,
                 fontWeight: 900,
-                color: "#22c55e",
-                marginBottom: 8,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom: 14,
               }}
             >
-              DEALER SIGNUP
+              Dealer Signup
             </div>
 
-            <h3 style={{ fontSize: 26, marginBottom: 12 }}>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "clamp(30px, 4vw, 44px)",
+                lineHeight: 0.96,
+                letterSpacing: "-0.055em",
+              }}
+            >
               Start acquiring better trades.
-            </h3>
+            </h2>
 
-            <p style={{ color: "#cbd5f5", fontSize: 14 }}>
+            <p
+              style={{
+                margin: "14px 0 0",
+                color: "#dbeafe",
+                fontSize: 15,
+                lineHeight: 1.55,
+                fontWeight: 700,
+              }}
+            >
               SolaceTrade turns trade-in intake into a guided acquisition flow:
               photo capture, VIN context, manager routing, and dealer-ready review.
             </p>
 
             <div
               style={{
-                marginTop: 14,
                 display: "flex",
-                gap: 8,
                 flexWrap: "wrap",
+                gap: 8,
+                marginTop: 18,
               }}
             >
-              <span style={pill}>Dealer onboarding</span>
-              <span style={pill}>Manager routing</span>
-              <span style={pill}>Monthly platform access</span>
+              <span style={darkPill}>Dealer onboarding</span>
+              <span style={darkPill}>Manager routing</span>
+              <span style={darkPill}>Monthly platform access</span>
             </div>
           </div>
 
-          {/* RIGHT CARD */}
           <div
             style={{
               padding: 24,
-              borderRadius: 20,
+              borderRadius: 22,
               background: "white",
               color: "#0f172a",
+              position: "relative",
+              overflow: "hidden",
+              boxShadow: "0 24px 70px rgba(0,0,0,0.26)",
             }}
           >
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>
-              Dealer Access
+            <div
+              style={{
+                position: "absolute",
+                top: 18,
+                right: 18,
+                padding: "7px 10px",
+                borderRadius: 999,
+                background: "#dcfce7",
+                color: "#166534",
+                fontSize: 11,
+                fontWeight: 900,
+              }}
+            >
+              Live
             </div>
 
-            <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>
+              Dealer Access
+            </h3>
+
+            <p
+              style={{
+                margin: "6px 0 16px",
+                color: "#64748b",
+                fontSize: 13,
+                lineHeight: 1.45,
+                maxWidth: 300,
+              }}
+            >
               Complete setup and subscription to begin onboarding.
             </p>
 
             <a
               href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200"
               target="_blank"
+              rel="noreferrer"
               style={primaryBtn}
             >
-              Start Subscription — $595/mo
+              <span>Start Subscription</span>
+              <span>$595/mo</span>
             </a>
 
-            <a
-              href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
-              target="_blank"
-              style={secondaryBtn}
-            >
-              Pay Setup Fee — $299
-            </a>
+            <div style={{ position: "relative", marginTop: 10 }}>
+              <div
+                style={{
+                  position: "absolute",
+                  top: -12,
+                  left: 14,
+                  right: 14,
+                  zIndex: 3,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "linear-gradient(90deg, #b91c1c, #ef4444)",
+                  color: "white",
+                  fontSize: 11,
+                  fontWeight: 950,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  boxShadow: "0 12px 26px rgba(185,28,28,0.32)",
+                  border: "1px solid rgba(255,255,255,0.35)",
+                }}
+              >
+                Waived for signups before July 1
+              </div>
+
+              <a
+                href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  ...secondaryBtn,
+                  paddingTop: 20,
+                  opacity: 0.82,
+                }}
+              >
+                <span>Pay Setup Fee</span>
+                <span style={{ textDecoration: "line-through", opacity: 0.8 }}>$299</span>
+              </a>
+            </div>
 
             <p
               style={{
                 fontSize: 12,
-                color: "#94a3b8",
-                marginTop: 10,
+                color: "#64748b",
+                margin: "14px 0 0",
+                lineHeight: 1.45,
               }}
             >
-              One-time setup fee + active subscription required
+              Setup fee is waived for dealers who start a monthly subscription before July 1.
             </p>
           </div>
         </div>
       </section>
 
-      {/* FOOTER */}
       <footer
         style={{
           padding: 22,
@@ -253,35 +404,53 @@ export default function Page() {
   );
 }
 
-/* styles */
-const pill = {
-  padding: "6px 10px",
+const heroPill: React.CSSProperties = {
+  padding: "7px 10px",
   borderRadius: 999,
+  background: "white",
+  border: "1px solid #e2e8f0",
+};
+
+const darkPill: React.CSSProperties = {
+  padding: "8px 11px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.09)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  color: "#e2e8f0",
   fontSize: 12,
-  background: "rgba(255,255,255,0.08)",
-};
-
-const primaryBtn = {
-  display: "block",
-  width: "100%",
-  padding: "14px",
-  borderRadius: 12,
-  background: "#22c55e",
-  color: "black",
   fontWeight: 900,
-  textAlign: "center" as const,
-  textDecoration: "none",
-  marginBottom: 10,
 };
 
-const secondaryBtn = {
-  display: "block",
+const primaryBtn: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
   width: "100%",
-  padding: "14px",
-  borderRadius: 12,
-  background: "#e2e8f0",
+  boxSizing: "border-box",
+  padding: "15px 16px",
+  borderRadius: 15,
+  background: "#16a34a",
+  color: "white",
+  fontWeight: 950,
+  fontSize: 15,
+  textDecoration: "none",
+  boxShadow: "0 14px 30px rgba(22,163,74,0.26)",
+};
+
+const secondaryBtn: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "15px 16px",
+  borderRadius: 15,
+  background: "#f1f5f9",
   color: "#0f172a",
-  fontWeight: 900,
-  textAlign: "center" as const,
+  fontWeight: 950,
+  fontSize: 15,
   textDecoration: "none",
+  border: "1px solid #e2e8f0",
 };
