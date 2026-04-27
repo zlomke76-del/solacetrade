@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 type Dealer = {
   id: string;
@@ -51,19 +51,8 @@ const blankForm: DealerForm = {
 
 const dark = "#0f172a";
 const muted = "#64748b";
-
-function inputStyle(): React.CSSProperties {
-  return {
-    width: "100%",
-    padding: "12px 13px",
-    borderRadius: 13,
-    border: "1px solid #cbd5e1",
-    background: "white",
-    color: dark,
-    fontSize: 14,
-    outline: "none",
-  };
-}
+const border = "#e2e8f0";
+const soft = "#f8fafc";
 
 function normalizeSlug(value: string) {
   return value
@@ -92,6 +81,81 @@ function dealerToForm(dealer: Dealer): DealerForm {
   };
 }
 
+function hasRoutingEmail(dealer: Pick<Dealer, "lead_email">) {
+  return Boolean(dealer.lead_email && dealer.lead_email.includes("@"));
+}
+
+function isErrorStatus(message: string) {
+  const lowered = message.toLowerCase();
+  return lowered.includes("could") || lowered.includes("error") || lowered.includes("failed");
+}
+
+function fieldStyle(): CSSProperties {
+  return {
+    width: "100%",
+    padding: "12px 13px",
+    borderRadius: 13,
+    border: "1px solid #cbd5e1",
+    background: "white",
+    color: dark,
+    fontSize: 14,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+}
+
+function labelStyle(): CSSProperties {
+  return {
+    display: "grid",
+    gap: 6,
+    color: "#334155",
+    fontSize: 12,
+    fontWeight: 900,
+  };
+}
+
+function SectionHeader({ title, note }: { title: string; note?: string }) {
+  return (
+    <div style={{ margin: "18px 0 10px" }}>
+      <h3 style={{ margin: 0, color: dark, fontSize: 14, letterSpacing: "-0.01em" }}>
+        {title}
+      </h3>
+      {note ? (
+        <p style={{ margin: "4px 0 0", color: muted, fontSize: 12, lineHeight: 1.45 }}>
+          {note}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function Pill({ children, tone }: { children: React.ReactNode; tone: "green" | "gray" | "amber" }) {
+  const styles: Record<typeof tone, CSSProperties> = {
+    green: { background: "#dcfce7", color: "#166534" },
+    gray: { background: "#e2e8f0", color: "#475569" },
+    amber: { background: "#fef3c7", color: "#92400e" },
+  };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "6px 9px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 900,
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+        ...styles[tone],
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export default function AdminDealersPage() {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [form, setForm] = useState<DealerForm>(blankForm);
@@ -106,11 +170,11 @@ export default function AdminDealersPage() {
     const query = search.trim().toLowerCase();
     if (!query) return dealers;
 
-    return dealers.filter((dealer) => {
-      return [dealer.name, dealer.slug, dealer.lead_email, dealer.city, dealer.state]
+    return dealers.filter((dealer) =>
+      [dealer.name, dealer.slug, dealer.lead_email, dealer.city, dealer.state]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
-    });
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
   }, [dealers, search]);
 
   async function loadDealers() {
@@ -148,6 +212,7 @@ export default function AdminDealersPage() {
   function startCreate() {
     setForm(blankForm);
     setStatus("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function startEdit(dealer: Dealer) {
@@ -218,6 +283,8 @@ export default function AdminDealersPage() {
     }
   }
 
+  const statusIsError = status ? isErrorStatus(status) : false;
+
   return (
     <main
       style={{
@@ -229,16 +296,105 @@ export default function AdminDealersPage() {
         padding: 18,
       }}
     >
-      <section style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            alignItems: "flex-start",
-            marginBottom: 16,
-          }}
-        >
+      <style>{`
+        .admin-shell {
+          max-width: 1180px;
+          margin: 0 auto;
+        }
+
+        .admin-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 16px;
+          align-items: flex-start;
+          margin-bottom: 18px;
+        }
+
+        .admin-grid {
+          display: grid;
+          grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.35fr);
+          gap: 18px;
+          align-items: start;
+        }
+
+        .admin-card {
+          background: white;
+          border: 1px solid ${border};
+          border-radius: 24px;
+          padding: 18px;
+          box-shadow: 0 20px 60px rgba(15,23,42,0.08);
+        }
+
+        .field-grid {
+          display: grid;
+          gap: 11px;
+        }
+
+        .two-col {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 10px;
+        }
+
+        .location-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 96px 120px;
+          gap: 8px;
+        }
+
+        .dealer-card-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: flex-start;
+        }
+
+        .dealer-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 14px;
+        }
+
+        @media (max-width: 900px) {
+          main {
+            padding: 12px !important;
+          }
+
+          .admin-header {
+            flex-direction: column;
+          }
+
+          .admin-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .admin-card {
+            border-radius: 18px;
+            padding: 14px;
+          }
+
+          .two-col,
+          .location-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .dealer-card-header {
+            flex-direction: column;
+          }
+
+          .dealer-actions a,
+          .dealer-actions button {
+            flex: 1 1 auto;
+            text-align: center;
+          }
+        }
+      `}</style>
+
+      <section className="admin-shell">
+        <div className="admin-header">
           <div>
             <div
               style={{
@@ -266,9 +422,9 @@ export default function AdminDealersPage() {
             >
               Dealer dashboard.
             </h1>
-            <p style={{ margin: "8px 0 0", color: muted, maxWidth: 680, lineHeight: 1.55 }}>
-              Create and manage dealer clients without changing code. Each active dealer is available at
-              /[dealerSlug] and /[dealerSlug]/internal.
+            <p style={{ margin: "8px 0 0", color: muted, maxWidth: 720, lineHeight: 1.55 }}>
+              Create dealers, configure the used car manager routing email, and control the customer
+              and internal intake links from one place.
             </p>
           </div>
 
@@ -285,136 +441,171 @@ export default function AdminDealersPage() {
               fontWeight: 900,
               cursor: "pointer",
               whiteSpace: "nowrap",
+              boxShadow: "0 14px 30px rgba(15,23,42,0.16)",
             }}
           >
             + New Dealer
           </button>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 0.95fr) minmax(0, 1.35fr)",
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
-          <form
-            onSubmit={saveDealer}
-            style={{
-              background: "white",
-              border: "1px solid #e2e8f0",
-              borderRadius: 24,
-              padding: 16,
-              boxShadow: "0 20px 60px rgba(15,23,42,0.08)",
-            }}
-          >
-            <h2 style={{ margin: 0, fontSize: 20 }}>
-              {isEditing ? "Edit dealer" : "Create dealer"}
-            </h2>
-            <p style={{ margin: "5px 0 14px", color: muted, fontSize: 13, lineHeight: 1.45 }}>
-              Name, slug, and lead email are required. Slug controls the public and internal URLs.
-            </p>
+        <div className="admin-grid">
+          <form onSubmit={saveDealer} className="admin-card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 20 }}>
+                  {isEditing ? "Edit dealer" : "Create dealer"}
+                </h2>
+                <p style={{ margin: "5px 0 0", color: muted, fontSize: 13, lineHeight: 1.45 }}>
+                  Name, slug, and manager routing email are required.
+                </p>
+              </div>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+              {isEditing ? <Pill tone="gray">Editing</Pill> : <Pill tone="green">New</Pill>}
+            </div>
+
+            <SectionHeader
+              title="Dealer identity"
+              note="Slug controls both customer and internal URLs."
+            />
+            <div className="field-grid">
+              <label style={labelStyle()}>
                 Dealer name
                 <input
+                  required
                   value={form.name}
                   onChange={(event) => updateField("name", event.target.value)}
                   placeholder="Brenham CDJR"
-                  style={{ ...inputStyle(), marginTop: 5 }}
+                  style={fieldStyle()}
                 />
               </label>
 
-              <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+              <label style={labelStyle()}>
                 Slug
                 <input
+                  required
                   value={form.slug}
                   onChange={(event) => updateField("slug", normalizeSlug(event.target.value))}
                   placeholder="brenhamcdjr"
-                  style={{ ...inputStyle(), marginTop: 5 }}
+                  style={fieldStyle()}
                 />
               </label>
 
-              <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
-                Lead email
-                <input
-                  value={form.lead_email}
-                  onChange={(event) => updateField("lead_email", event.target.value)}
-                  placeholder="manager@dealer.com"
-                  style={{ ...inputStyle(), marginTop: 5 }}
-                />
-              </label>
-
-              <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+              <label style={labelStyle()}>
                 Legal name
                 <input
                   value={form.legal_name}
                   onChange={(event) => updateField("legal_name", event.target.value)}
                   placeholder="Optional legal entity name"
-                  style={{ ...inputStyle(), marginTop: 5 }}
+                  style={fieldStyle()}
                 />
               </label>
+            </div>
 
-              <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+            <SectionHeader
+              title="Used car manager routing"
+              note="Trade appraisal packets are automatically sent to this email for approval."
+            />
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 18,
+                background: "#f8fafc",
+                border: "1px solid #dbeafe",
+              }}
+            >
+              <label style={labelStyle()}>
+                Used Car Manager Email
+                <input
+                  required
+                  type="email"
+                  value={form.lead_email}
+                  onChange={(event) => updateField("lead_email", event.target.value)}
+                  placeholder="manager@dealer.com"
+                  style={fieldStyle()}
+                />
+              </label>
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "10px 11px",
+                  borderRadius: 14,
+                  background: "white",
+                  border: "1px solid #e2e8f0",
+                  color: muted,
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                }}
+              >
+                Salespeople will not enter this manually. The internal intake flow uses this saved
+                routing address when the packet is submitted.
+              </div>
+            </div>
+
+            <SectionHeader title="Contact and location" />
+            <div className="field-grid">
+              <label style={labelStyle()}>
                 Sales phone
                 <input
                   value={form.sales_phone}
                   onChange={(event) => updateField("sales_phone", event.target.value)}
                   placeholder="Optional phone"
-                  style={{ ...inputStyle(), marginTop: 5 }}
+                  style={fieldStyle()}
                 />
               </label>
 
-              <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+              <label style={labelStyle()}>
                 Address
                 <input
                   value={form.address_line}
                   onChange={(event) => updateField("address_line", event.target.value)}
                   placeholder="Street address"
-                  style={{ ...inputStyle(), marginTop: 5 }}
+                  style={fieldStyle()}
                 />
               </label>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 96px 120px", gap: 8 }}>
-                <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+              <div className="location-grid">
+                <label style={labelStyle()}>
                   City
                   <input
                     value={form.city}
                     onChange={(event) => updateField("city", event.target.value)}
                     placeholder="City"
-                    style={{ ...inputStyle(), marginTop: 5 }}
+                    style={fieldStyle()}
                   />
                 </label>
-                <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+                <label style={labelStyle()}>
                   State
                   <input
                     value={form.state}
-                    onChange={(event) => updateField("state", event.target.value.toUpperCase().slice(0, 2))}
+                    onChange={(event) =>
+                      updateField("state", event.target.value.toUpperCase().slice(0, 2))
+                    }
                     placeholder="TX"
-                    style={{ ...inputStyle(), marginTop: 5 }}
+                    style={fieldStyle()}
                   />
                 </label>
-                <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+                <label style={labelStyle()}>
                   ZIP
                   <input
                     value={form.postal_code}
                     onChange={(event) => updateField("postal_code", event.target.value)}
                     placeholder="77833"
-                    style={{ ...inputStyle(), marginTop: 5 }}
+                    style={fieldStyle()}
                   />
                 </label>
               </div>
+            </div>
 
+            <SectionHeader title="System settings" />
+            <div className="field-grid">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 56px", gap: 8, alignItems: "end" }}>
-                <label style={{ fontSize: 12, fontWeight: 900, color: muted }}>
+                <label style={labelStyle()}>
                   Brand color
                   <input
                     value={form.brand_color}
                     onChange={(event) => updateField("brand_color", event.target.value)}
                     placeholder="#b91c1c"
-                    style={{ ...inputStyle(), marginTop: 5 }}
+                    style={fieldStyle()}
                   />
                 </label>
                 <div
@@ -432,22 +623,28 @@ export default function AdminDealersPage() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 9,
+                  justifyContent: "space-between",
+                  gap: 12,
                   padding: 12,
                   borderRadius: 14,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
+                  background: soft,
+                  border: `1px solid ${border}`,
                   fontSize: 13,
                   fontWeight: 900,
                   cursor: "pointer",
                 }}
               >
+                <span>
+                  Active dealer
+                  <span style={{ display: "block", color: muted, fontSize: 12, fontWeight: 700, marginTop: 2 }}>
+                    Active dealers can receive customer and internal intake traffic.
+                  </span>
+                </span>
                 <input
                   type="checkbox"
                   checked={form.is_active}
                   onChange={(event) => updateField("is_active", event.target.checked)}
                 />
-                Active dealer
               </label>
             </div>
 
@@ -456,7 +653,7 @@ export default function AdminDealersPage() {
               disabled={saving}
               style={{
                 width: "100%",
-                marginTop: 14,
+                marginTop: 16,
                 border: "none",
                 borderRadius: 15,
                 background: dark,
@@ -471,37 +668,25 @@ export default function AdminDealersPage() {
               {saving ? "Saving..." : isEditing ? "Save dealer" : "Create dealer"}
             </button>
 
-            {status && (
+            {status ? (
               <div
                 style={{
                   marginTop: 12,
                   padding: 11,
                   borderRadius: 14,
-                  background: status.toLowerCase().includes("could") || status.toLowerCase().includes("error")
-                    ? "#fef2f2"
-                    : "#f0fdf4",
-                  color: status.toLowerCase().includes("could") || status.toLowerCase().includes("error")
-                    ? "#991b1b"
-                    : "#166534",
+                  background: statusIsError ? "#fef2f2" : "#f0fdf4",
+                  color: statusIsError ? "#991b1b" : "#166534",
                   fontSize: 13,
                   fontWeight: 800,
                 }}
               >
                 {status}
               </div>
-            )}
+            ) : null}
           </form>
 
-          <section
-            style={{
-              background: "white",
-              border: "1px solid #e2e8f0",
-              borderRadius: 24,
-              padding: 16,
-              boxShadow: "0 20px 60px rgba(15,23,42,0.08)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+          <section className="admin-card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 20 }}>Dealers</h2>
                 <p style={{ margin: "5px 0 0", color: muted, fontSize: 13 }}>
@@ -529,133 +714,180 @@ export default function AdminDealersPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search dealers"
-              style={{ ...inputStyle(), marginTop: 12 }}
+              placeholder="Search dealers, slugs, manager emails, or locations"
+              style={{ ...fieldStyle(), marginTop: 12 }}
             />
 
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-              {filteredDealers.map((dealer) => (
-                <article
-                  key={dealer.id}
-                  style={{
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 18,
-                    padding: 13,
-                    background: dealer.is_active ? "#ffffff" : "#f8fafc",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div>
-                      <strong style={{ display: "block", fontSize: 16 }}>{dealer.name}</strong>
-                      <span style={{ display: "block", color: muted, fontSize: 13, marginTop: 3 }}>
-                        /{dealer.slug} · /{dealer.slug}/internal
-                      </span>
-                      <span style={{ display: "block", color: muted, fontSize: 13, marginTop: 3 }}>
-                        {dealer.lead_email}
-                      </span>
+            <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+              {filteredDealers.map((dealer) => {
+                const routingConfigured = hasRoutingEmail(dealer);
+
+                return (
+                  <article
+                    key={dealer.id}
+                    style={{
+                      border: `1px solid ${border}`,
+                      borderRadius: 18,
+                      padding: 14,
+                      background: dealer.is_active ? "#ffffff" : "#f8fafc",
+                    }}
+                  >
+                    <div className="dealer-card-header">
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ display: "block", fontSize: 16 }}>{dealer.name}</strong>
+                        <span style={{ display: "block", color: muted, fontSize: 13, marginTop: 4 }}>
+                          /{dealer.slug} · /{dealer.slug}/internal
+                        </span>
+                        <span
+                          style={{
+                            display: "block",
+                            color: routingConfigured ? dark : "#92400e",
+                            fontSize: 13,
+                            marginTop: 6,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          Manager routing: {dealer.lead_email || "Missing"}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <Pill tone={dealer.is_active ? "green" : "gray"}>
+                          {dealer.is_active ? "Active" : "Inactive"}
+                        </Pill>
+                        <Pill tone={routingConfigured ? "green" : "amber"}>
+                          {routingConfigured ? "Routing set" : "Routing missing"}
+                        </Pill>
+                      </div>
                     </div>
-                    <span
-                      style={{
-                        alignSelf: "flex-start",
-                        padding: "6px 9px",
-                        borderRadius: 999,
-                        background: dealer.is_active ? "#dcfce7" : "#e2e8f0",
-                        color: dealer.is_active ? "#166534" : "#475569",
-                        fontSize: 11,
-                        fontWeight: 900,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {dealer.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-                    <a
-                      href={`/${dealer.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
+                    <div
                       style={{
-                        padding: "9px 10px",
-                        borderRadius: 12,
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                        color: dark,
-                        textDecoration: "none",
-                        fontSize: 12,
-                        fontWeight: 900,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 8,
+                        marginTop: 12,
                       }}
                     >
-                      Open customer
-                    </a>
-                    <a
-                      href={`/${dealer.slug}/internal`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        padding: "9px 10px",
-                        borderRadius: 12,
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                        color: dark,
-                        textDecoration: "none",
-                        fontSize: 12,
-                        fontWeight: 900,
-                      }}
-                    >
-                      Open internal
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => startEdit(dealer)}
-                      style={{
-                        padding: "9px 10px",
-                        borderRadius: 12,
-                        background: dark,
-                        border: "none",
-                        color: "white",
-                        fontSize: 12,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleDealer(dealer)}
-                      disabled={saving}
-                      style={{
-                        padding: "9px 10px",
-                        borderRadius: 12,
-                        background: dealer.is_active ? "#fff7ed" : "#f0fdf4",
-                        border: dealer.is_active ? "1px solid #fed7aa" : "1px solid #bbf7d0",
-                        color: dealer.is_active ? "#9a3412" : "#166534",
-                        fontSize: 12,
-                        fontWeight: 900,
-                        cursor: saving ? "wait" : "pointer",
-                      }}
-                    >
-                      {dealer.is_active ? "Deactivate" : "Activate"}
-                    </button>
-                  </div>
-                </article>
-              ))}
+                      <div
+                        style={{
+                          padding: 10,
+                          borderRadius: 14,
+                          background: soft,
+                          border: `1px solid ${border}`,
+                        }}
+                      >
+                        <span style={{ display: "block", color: muted, fontSize: 11, fontWeight: 900 }}>
+                          Customer link
+                        </span>
+                        <span style={{ display: "block", color: dark, fontSize: 12, marginTop: 3 }}>
+                          /{dealer.slug}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          padding: 10,
+                          borderRadius: 14,
+                          background: soft,
+                          border: `1px solid ${border}`,
+                        }}
+                      >
+                        <span style={{ display: "block", color: muted, fontSize: 11, fontWeight: 900 }}>
+                          Internal link
+                        </span>
+                        <span style={{ display: "block", color: dark, fontSize: 12, marginTop: 3 }}>
+                          /{dealer.slug}/internal
+                        </span>
+                      </div>
+                    </div>
 
-              {!loading && filteredDealers.length === 0 && (
+                    <div className="dealer-actions">
+                      <a
+                        href={`/${dealer.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: 12,
+                          background: soft,
+                          border: `1px solid ${border}`,
+                          color: dark,
+                          textDecoration: "none",
+                          fontSize: 12,
+                          fontWeight: 900,
+                        }}
+                      >
+                        Open customer
+                      </a>
+                      <a
+                        href={`/${dealer.slug}/internal`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: 12,
+                          background: soft,
+                          border: `1px solid ${border}`,
+                          color: dark,
+                          textDecoration: "none",
+                          fontSize: 12,
+                          fontWeight: 900,
+                        }}
+                      >
+                        Open internal
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(dealer)}
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: 12,
+                          background: dark,
+                          border: "none",
+                          color: "white",
+                          fontSize: 12,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleDealer(dealer)}
+                        disabled={saving}
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: 12,
+                          background: dealer.is_active ? "#fff7ed" : "#f0fdf4",
+                          border: dealer.is_active ? "1px solid #fed7aa" : "1px solid #bbf7d0",
+                          color: dealer.is_active ? "#9a3412" : "#166534",
+                          fontSize: 12,
+                          fontWeight: 900,
+                          cursor: saving ? "wait" : "pointer",
+                        }}
+                      >
+                        {dealer.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {!loading && filteredDealers.length === 0 ? (
                 <div
                   style={{
                     padding: 18,
                     borderRadius: 18,
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
+                    background: soft,
+                    border: `1px solid ${border}`,
                     color: muted,
                     fontSize: 14,
                   }}
                 >
                   No dealers found.
                 </div>
-              )}
+              ) : null}
             </div>
           </section>
         </div>
