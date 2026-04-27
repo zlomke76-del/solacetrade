@@ -5,7 +5,10 @@ import { ChangeEvent, useMemo, useRef, useState } from "react";
 type TradeDeskMode = "customer" | "internal";
 
 type TradeDeskProps = {
+  dealerSlug: string;
   mode?: TradeDeskMode;
+  dealerName?: string;
+  brandColor?: string;
 };
 
 type CaptureStep = {
@@ -19,11 +22,17 @@ type CaptureStep = {
 
 type PhotoMap = Record<string, File | null>;
 
-type ResultState = {
+type SolaceValue = {
+  offerAmount: number | null;
+  offerRangeLow: number | null;
+  offerRangeHigh: number | null;
   title: string;
   confidence: "Low" | "Medium" | "High";
-  admissibility: "PASS" | "PARTIAL";
-  lines: string[];
+  admissibility: "PASS" | "PARTIAL" | "DENY";
+  summaryLines: string[];
+  conditionNotes: string[];
+  missingItems: string[];
+  dealerReviewNotes: string[];
 };
 
 const captureSteps: CaptureStep[] = [
@@ -69,11 +78,11 @@ const captureSteps: CaptureStep[] = [
   },
 ];
 
-const red = "#b91c1c";
 const dark = "#0f172a";
 const muted = "#64748b";
 
-function formatMoney(value: number) {
+function formatMoney(value: number | null | undefined) {
+  if (!value) return "Pending dealer review";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -102,8 +111,10 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
-export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
+export default function TradeDesk({ dealerSlug, mode = "customer", dealerName = "your dealer", brandColor = "#b91c1c" }: TradeDeskProps) {
   const isInternal = mode === "internal";
+  const red = brandColor || "#b91c1c";
+
   const [started, setStarted] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [photos, setPhotos] = useState<PhotoMap>(() => emptyPhotos());
@@ -114,7 +125,11 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   const [customerName, setCustomerName] = useState("");
   const [managerNotes, setManagerNotes] = useState("");
   const [customerIntent, setCustomerIntent] = useState("");
-  const [result, setResult] = useState<ResultState | null>(null);
+  const [intakeId, setIntakeId] = useState<string | null>(null);
+  const [value, setValue] = useState<SolaceValue | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
@@ -136,7 +151,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
 
   const readyForValue = scanComplete && vin.trim().length > 0 && mileageNumber > 0;
   const nextMissingPhoto = captureSteps.find((step) => !photos[step.key]);
-  const nextMissing = scanComplete ? missingItems[0] : nextMissingPhoto?.shortLabel + " photo";
+  const nextMissing = scanComplete ? missingItems[0] : `${nextMissingPhoto?.shortLabel || "next"} photo`;
 
   function openCameraOrFilePicker() {
     setStarted(true);
@@ -149,8 +164,11 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
 
     setStarted(true);
     setPhotos((previous) => ({ ...previous, [currentStep.key]: file }));
-    setResult(null);
+    setValue(null);
     setCustomerIntent("");
+    setIntakeId(null);
+    setErrorMessage("");
+    setStatusMessage("");
 
     if (stepIndex < captureSteps.length - 1) {
       setStepIndex((index) => index + 1);
@@ -159,51 +177,95 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
     event.target.value = "";
   }
 
-  function produceSolaceValue() {
+  async function createIntakeAndValue() {
+    setErrorMessage("");
+    setStatusMessage("");
+
     if (!readyForValue) {
-      setResult({
-        title: scanComplete ? "Solace needs VIN and mileage to produce a cleaner value." : "Finish the five guided photos first.",
-        confidence: scanComplete ? "Medium" : "Low",
-        admissibility: "PARTIAL",
-        lines: [
-          scanComplete ? `Next needed: ${nextMissing}.` : `Next needed: ${nextMissing}.`,
-          `${capturedCount} of ${captureSteps.length} required photos captured.`,
-          "Solace will produce the value response after the scan state is complete.",
-        ],
-      });
+      setErrorMessage(scanComplete ? `Next needed: ${nextMissing}.` : `Finish the five guided photos first. Next needed: ${nextMissing}.`);
       return;
     }
 
-    if (isInternal) {
-      setResult({
-        title: "Solace packet ready for manager review.",
-        confidence: "High",
-        admissibility: "PASS",
-        lines: [
-          "Photo sequence, VIN, and mileage are present.",
-          "The customer intention can be captured after the value response.",
-          "Recall check is queued for VIN verification.",
-        ],
+    setSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("mode", mode);
+      formData.append("vin", vin);
+      formData.append("mileage", mileage);
+      formData.append("contact", contact);
+      formData.append("customerName", customerName);
+      formData.append("salesperson", salesperson);
+      formData.append("managerNotes", managerNotes);
+
+      for (const step of captureSteps) {
+        const file = photos[step.key];
+        if (file) formData.append(step.key, file);
+      }
+
+      setStatusMessage("Saving vehicle scan...");
+      const intakeResponse = await fetch(`/api/solacetrade/${dealerSlug}/intake`, {
+        method: "POST",
+        body: formData,
       });
+
+      const intakeJson = await intakeResponse.json();
+      if (!intakeResponse.ok) throw new Error(intakeJson.error || "Could not save vehicle scan.");
+
+      setIntakeId(intakeJson.intakeId);
+      setStatusMessage("Solace is producing the instant cash offer...");
+
+      const valueResponse = await fetch(`/api/solacetrade/${dealerSlug}/value`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intakeId: intakeJson.intakeId }),
+      });
+
+      const valueJson = await valueResponse.json();
+      if (!valueResponse.ok) throw new Error(valueJson.error || "Could not produce cash offer.");
+
+      setValue(valueJson.value);
+      setStatusMessage("Instant cash offer ready.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+      setStatusMessage("");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitVehicleFile() {
+    setErrorMessage("");
+    setStatusMessage("");
+
+    if (!intakeId) {
+      setErrorMessage("Create the instant cash offer before sending the vehicle file.");
       return;
     }
 
-    let base = 26500;
-    base -= mileageNumber * 0.045;
-    if (scanComplete) base += 750;
+    setSubmitting(true);
 
-    const offer = formatMoney(Math.max(7500, Math.round(base)));
+    try {
+      const response = await fetch(`/api/solacetrade/${dealerSlug}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intakeId,
+          customerIntent,
+          contact,
+          customerName,
+        }),
+      });
 
-    setResult({
-      title: `Solace preliminary value: ${offer}`,
-      confidence: "High",
-      admissibility: "PASS",
-      lines: [
-        "Your photo sequence, VIN, and mileage are complete enough to produce a preliminary value.",
-        "Brenham CDJR can now review the vehicle file and verify recall status, title, payoff, and condition match.",
-        "Tell us what you want to do next so the right team can follow up.",
-      ],
-    });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error || "Could not send vehicle file.");
+
+      setStatusMessage(json.emailed ? `Vehicle file sent to ${json.dealer.name}.` : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function resetScan() {
@@ -217,7 +279,10 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
     setCustomerName("");
     setManagerNotes("");
     setCustomerIntent("");
-    setResult(null);
+    setIntakeId(null);
+    setValue(null);
+    setStatusMessage("");
+    setErrorMessage("");
   }
 
   return (
@@ -263,7 +328,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               textTransform: "uppercase",
             }}
           >
-            <span style={{ width: 7, height: 7, borderRadius: 999, background: isInternal ? "#38bdf8" : "#ef4444" }} />
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: isInternal ? "#38bdf8" : red }} />
             {isInternal ? "Manager Packet" : "Guided Vehicle Scan"}
           </div>
           <strong style={{ fontSize: 12, opacity: 0.86 }}>{capturedCount}/5 photos</strong>
@@ -282,7 +347,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               width: `${photoProgress}%`,
               height: "100%",
               borderRadius: 999,
-              background: isInternal ? "#38bdf8" : "#ef4444",
+              background: isInternal ? "#38bdf8" : red,
               transition: "width 220ms ease",
             }}
           />
@@ -361,7 +426,7 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
             <div>
               <h3 style={{ margin: 0, fontSize: 18 }}>{showDetails ? "Add VIN and mileage" : "Finish the photo sequence"}</h3>
               <p style={{ margin: "4px 0 0", color: muted, fontSize: 13, lineHeight: 1.35 }}>
-                {showDetails ? "Solace will produce the value after these two details." : nextMissing ? `Next needed: ${nextMissing}.` : "Keep going."}
+                {showDetails ? "Solace produces the instant cash offer after these details." : nextMissing ? `Next needed: ${nextMissing}.` : "Keep going."}
               </p>
             </div>
             <div style={{ minWidth: 68, textAlign: "right", color: readyForValue ? "#047857" : red, fontWeight: 900, fontSize: 13 }}>
@@ -374,6 +439,10 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               <input placeholder="Salesperson" value={salesperson} onChange={(event) => setSalesperson(event.target.value)} style={inputStyle()} />
               <input placeholder="Customer" value={customerName} onChange={(event) => setCustomerName(event.target.value)} style={inputStyle()} />
             </div>
+          )}
+
+          {!isInternal && showDetails && (
+            <input placeholder="Name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} style={{ ...inputStyle(), marginBottom: 9 }} />
           )}
 
           {showDetails && (
@@ -395,7 +464,8 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
 
           <button
             type="button"
-            onClick={produceSolaceValue}
+            disabled={submitting}
+            onClick={createIntakeAndValue}
             style={{
               width: "100%",
               marginTop: showDetails ? 11 : 13,
@@ -406,66 +476,65 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               color: "white",
               fontSize: 15,
               fontWeight: 900,
-              cursor: "pointer",
+              cursor: submitting ? "wait" : "pointer",
+              opacity: submitting ? 0.72 : 1,
               boxShadow: isInternal ? "0 16px 32px rgba(15,23,42,0.18)" : "0 16px 32px rgba(185,28,28,0.22)",
             }}
           >
-            {readyForValue ? "Have Solace Produce My Value" : showDetails ? "Continue to Value" : "Continue Photo Scan"}
+            {submitting ? "Working..." : readyForValue ? "Get My Instant Cash Offer" : showDetails ? "Continue to Offer" : "Continue Photo Scan"}
           </button>
         </div>
 
-        {result && (
+        {(statusMessage || errorMessage) && (
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 16, background: errorMessage ? "#fef2f2" : "#f0fdf4", color: errorMessage ? "#991b1b" : "#166534", fontSize: 13, fontWeight: 800 }}>
+            {errorMessage || statusMessage}
+          </div>
+        )}
+
+        {value && (
           <div style={{ marginTop: 14, padding: 16, borderRadius: 22, border: "1px solid #e2e8f0", background: "white" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 999, background: "#f1f5f9", color: dark, fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: red }} />
               Solace Response
             </div>
-            <strong style={{ display: "block", fontSize: 20, letterSpacing: "-0.03em", lineHeight: 1.1 }}>{result.title}</strong>
+            <strong style={{ display: "block", fontSize: 24, letterSpacing: "-0.04em", lineHeight: 1.05 }}>{value.title || `Instant cash offer: ${formatMoney(value.offerAmount)}`}</strong>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>Confidence</strong><br />{result.confidence}</span>
-              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>State</strong><br />{result.admissibility}</span>
+              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>Offer</strong><br />{formatMoney(value.offerAmount)}</span>
+              <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>State</strong><br />{value.admissibility}</span>
               <span style={{ padding: 10, borderRadius: 13, background: "#f8fafc", fontSize: 12 }}><strong>Photos</strong><br />{capturedCount}/5</span>
             </div>
-            {result.lines.map((line) => (
+            {(value.summaryLines || []).map((line) => (
               <p key={line} style={{ margin: "10px 0 0", color: "#334155", fontSize: 13, lineHeight: 1.45 }}>{line}</p>
             ))}
 
-            {readyForValue && (
-              <div style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>What would you like to do next?</strong>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-                  {[
-                    ["trade", "Trade it"],
-                    ["sell", "Sell it"],
-                    ["talk", "Talk to someone"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setCustomerIntent(value)}
-                      style={{
-                        padding: "11px 8px",
-                        borderRadius: 14,
-                        border: customerIntent === value ? `2px solid ${red}` : "1px solid #cbd5e1",
-                        background: customerIntent === value ? "#fee2e2" : "white",
-                        color: customerIntent === value ? "#991b1b" : dark,
-                        fontSize: 12,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+            <div style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>What would you like to do next?</strong>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                {[
+                  ["trade", "Trade it"],
+                  ["sell", "Sell it"],
+                  ["talk", "Talk to someone"],
+                ].map(([intentValue, label]) => (
+                  <button
+                    key={intentValue}
+                    type="button"
+                    onClick={() => setCustomerIntent(intentValue)}
+                    style={{
+                      padding: "11px 8px",
+                      borderRadius: 14,
+                      border: customerIntent === intentValue ? `2px solid ${red}` : "1px solid #cbd5e1",
+                      background: customerIntent === intentValue ? "#fee2e2" : "white",
+                      color: customerIntent === intentValue ? "#991b1b" : dark,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            )}
-
-            {isInternal && (
-              <p style={{ margin: "10px 0 0", color: "#334155", fontSize: 13, lineHeight: 1.45 }}>
-                Salesperson: {salesperson || "Not entered"} · Customer: {customerName || "Not entered"}
-              </p>
-            )}
+            </div>
 
             <input
               placeholder={isInternal ? "Manager email or routing contact" : "Phone or email"}
@@ -473,8 +542,13 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
               onChange={(event) => setContact(event.target.value)}
               style={{ ...inputStyle(), marginTop: 12 }}
             />
-            <button type="button" style={{ width: "100%", marginTop: 9, padding: 14, borderRadius: 15, border: "none", background: dark, color: "white", fontSize: 15, fontWeight: 900, cursor: "pointer" }}>
-              {isInternal ? "Route to Used Car Manager" : customerIntent ? "Send My Vehicle File" : "Send to Brenham CDJR"}
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={submitVehicleFile}
+              style={{ width: "100%", marginTop: 9, padding: 14, borderRadius: 15, border: "none", background: dark, color: "white", fontSize: 15, fontWeight: 900, cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.72 : 1 }}
+            >
+              {isInternal ? "Route to Used Car Manager" : customerIntent ? "Send My Vehicle File" : `Send to ${dealerName}`}
             </button>
             <button type="button" onClick={resetScan} style={{ width: "100%", marginTop: 8, padding: 12, borderRadius: 15, border: "1px solid #cbd5e1", background: "white", color: "#334155", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
               Start over
