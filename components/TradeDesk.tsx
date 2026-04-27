@@ -12,7 +12,7 @@ type TradeDeskProps = {
 };
 
 type CaptureStep = {
-  key: string;
+  key: "front" | "driverSide" | "rear" | "odometer" | "vin";
   label: string;
   shortLabel: string;
   help: string;
@@ -20,7 +20,7 @@ type CaptureStep = {
   image: string;
 };
 
-type PhotoMap = Record<string, File | null>;
+type PhotoMap = Record<CaptureStep["key"], File | null>;
 
 type SolaceValue = {
   offerAmount: number | null;
@@ -41,6 +41,13 @@ type SolaceValue = {
     vin?: string | null;
     mileage?: string | number | null;
   } | null;
+};
+
+type IntakeErrorBody = {
+  error?: string;
+  missingPhotoSteps?: string[];
+  receivedPhotoSteps?: string[];
+  receivedKeys?: string[];
 };
 
 const captureSteps: CaptureStep[] = [
@@ -73,8 +80,7 @@ const captureSteps: CaptureStep[] = [
     label: "Odometer",
     shortLabel: "Miles",
     help: "Capture the mileage clearly.",
-    coaching:
-      "Turn the vehicle on if needed and avoid glare on the dash display.",
+    coaching: "Turn the vehicle on if needed and avoid glare on the dash display.",
     image: "/images/vehicle_scan_04.png",
   },
   {
@@ -82,8 +88,7 @@ const captureSteps: CaptureStep[] = [
     label: "VIN",
     shortLabel: "VIN",
     help: "Capture the VIN plate or door jamb sticker.",
-    coaching:
-      "Use the windshield VIN plate or driver door jamb label if clearer.",
+    coaching: "Use the windshield VIN plate or driver door jamb label if clearer.",
     image: "/images/vehicle_scan_05.png",
   },
 ];
@@ -106,14 +111,20 @@ function cleanMileage(value: string) {
 
 function displayMileage(value: string) {
   const cleaned = cleanMileage(value);
-  if (!cleaned) return "";
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    cleaned,
-  );
+  if (!cleaned) return value;
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(cleaned);
 }
 
 function emptyPhotos(): PhotoMap {
-  return Object.fromEntries(captureSteps.map((step) => [step.key, null]));
+  return {
+    front: null,
+    driverSide: null,
+    rear: null,
+    odometer: null,
+    vin: null,
+  };
 }
 
 function inputStyle(): React.CSSProperties {
@@ -135,8 +146,32 @@ function getValueVin(value: SolaceValue | null) {
 
 function getValueMileage(value: SolaceValue | null) {
   const raw =
-    value?.detectedMileage ?? value?.mileage ?? value?.vehicle?.mileage ?? "";
+    value?.detectedMileage ??
+    value?.mileage ??
+    value?.vehicle?.mileage ??
+    "";
+
   return raw ? String(raw) : "";
+}
+
+function hasContact(value: string) {
+  return value.trim().length >= 7;
+}
+
+function formatIntakeError(errorBody: IntakeErrorBody) {
+  if (!errorBody.missingPhotoSteps?.length) {
+    return errorBody.error || "Could not save vehicle scan.";
+  }
+
+  return [
+    errorBody.error || "All five guided vehicle photos are required.",
+    `Missing: ${errorBody.missingPhotoSteps.join(", ")}.`,
+    errorBody.receivedPhotoSteps?.length
+      ? `Received: ${errorBody.receivedPhotoSteps.join(", ")}.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export default function TradeDesk({
@@ -168,29 +203,26 @@ export default function TradeDesk({
   const currentStep = captureSteps[stepIndex];
   const capturedCount = Object.values(photos).filter(Boolean).length;
   const photoProgress = Math.round((capturedCount / captureSteps.length) * 100);
-  const scanComplete = capturedCount === captureSteps.length;
+  const scanComplete = captureSteps.every((step) => photos[step.key]);
   const showDetails = scanComplete;
-  const canRequestOffer = scanComplete;
-  const canSubmitVehicleFile = isInternal || (customerName.trim().length > 0 && contact.trim().length > 0);
-
-  const missingItems = useMemo(() => {
-    const missing: string[] = [];
-    captureSteps.forEach((step) => {
-      if (!photos[step.key]) missing.push(`${step.shortLabel} photo`);
-    });
-
-    if (!scanComplete) return missing;
-
-    return missing;
-  }, [scanComplete, photos]);
-
-  const nextMissingPhoto = captureSteps.find((step) => !photos[step.key]);
-  const nextMissing = scanComplete
-    ? missingItems[0]
-    : `${nextMissingPhoto?.shortLabel || "next"} photo`;
-
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
+  const canRequestOffer = scanComplete && !value;
+  const canSubmitVehicleFile =
+    Boolean(value) &&
+    customerName.trim().length > 0 &&
+    hasContact(contact) &&
+    customerIntent.trim().length > 0;
+
+  const missingPhotoLabels = useMemo(() => {
+    return captureSteps
+      .filter((step) => !photos[step.key])
+      .map((step) => step.shortLabel);
+  }, [photos]);
+
+  const nextMissing = missingPhotoLabels[0]
+    ? `${missingPhotoLabels[0]} photo`
+    : "";
 
   function openCameraOrFilePicker() {
     setStarted(true);
@@ -208,6 +240,8 @@ export default function TradeDesk({
     setIntakeId(null);
     setErrorMessage("");
     setStatusMessage("");
+    setVin("");
+    setMileage("");
 
     if (stepIndex < captureSteps.length - 1) {
       setStepIndex((index) => index + 1);
@@ -216,13 +250,27 @@ export default function TradeDesk({
     event.target.value = "";
   }
 
+  function appendEvidencePhotos(formData: FormData) {
+    for (const step of captureSteps) {
+      const file = photos[step.key];
+
+      if (!file) {
+        throw new Error(`Missing ${step.shortLabel} photo.`);
+      }
+
+      // Exact backend contract:
+      // front, driverSide, rear, odometer, vin
+      formData.append(step.key, file, file.name || `${step.key}.jpg`);
+    }
+  }
+
   async function createIntakeAndValue() {
     setErrorMessage("");
     setStatusMessage("");
 
     if (!scanComplete) {
       setErrorMessage(
-        `Finish the five guided photos first. Next needed: ${nextMissing}.`,
+        `Finish the five guided photos first. Next needed: ${nextMissing}.`
       );
       return;
     }
@@ -231,18 +279,17 @@ export default function TradeDesk({
 
     try {
       const formData = new FormData();
-      formData.append("mode", mode);
-      formData.append("vin", vin);
-      formData.append("mileage", mileage);
-      formData.append("contact", contact);
-      formData.append("customerName", customerName);
-      formData.append("salesperson", salesperson);
-      formData.append("managerNotes", managerNotes);
 
-      for (const step of captureSteps) {
-        const file = photos[step.key];
-        if (file) formData.append(step.key, file);
-      }
+      formData.append("mode", mode);
+
+      // Do not send manual VIN or mileage. The value route must derive them
+      // from the uploaded VIN and odometer evidence.
+      formData.append("customerName", "");
+      formData.append("contact", "");
+      formData.append("salesperson", isInternal ? salesperson : "");
+      formData.append("managerNotes", isInternal ? managerNotes : "");
+
+      appendEvidencePhotos(formData);
 
       setStatusMessage("Saving vehicle scan...");
       const intakeResponse = await fetch(
@@ -250,17 +297,20 @@ export default function TradeDesk({
         {
           method: "POST",
           body: formData,
-        },
+        }
       );
 
-      const intakeJson = await intakeResponse.json();
-      if (!intakeResponse.ok) {
-        throw new Error(intakeJson.error || "Could not save vehicle scan.");
+      const intakeJson = (await intakeResponse.json().catch(() => ({}))) as
+        | IntakeErrorBody
+        | { intakeId?: string };
+
+      if (!intakeResponse.ok || !("intakeId" in intakeJson) || !intakeJson.intakeId) {
+        throw new Error(formatIntakeError(intakeJson as IntakeErrorBody));
       }
 
       setIntakeId(intakeJson.intakeId);
       setStatusMessage(
-        "Solace is reading the scan and producing the instant cash offer...",
+        "Solace is reading the scan evidence and producing the instant cash offer..."
       );
 
       const valueResponse = await fetch(
@@ -269,10 +319,10 @@ export default function TradeDesk({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ intakeId: intakeJson.intakeId }),
-        },
+        }
       );
 
-      const valueJson = await valueResponse.json();
+      const valueJson = await valueResponse.json().catch(() => ({}));
       if (!valueResponse.ok) {
         throw new Error(valueJson.error || "Could not produce cash offer.");
       }
@@ -281,14 +331,14 @@ export default function TradeDesk({
       const nextVin = getValueVin(nextValue);
       const nextMileage = getValueMileage(nextValue);
 
-      if (nextVin && !vin.trim()) setVin(nextVin.toUpperCase());
-      if (nextMileage && !mileage.trim()) setMileage(nextMileage);
+      if (nextVin) setVin(nextVin.toUpperCase());
+      if (nextMileage) setMileage(nextMileage);
 
       setValue(nextValue);
       setStatusMessage("Instant cash offer ready.");
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Something went wrong.",
+        error instanceof Error ? error.message : "Something went wrong."
       );
       setStatusMessage("");
     } finally {
@@ -301,16 +351,22 @@ export default function TradeDesk({
     setStatusMessage("");
 
     if (!intakeId) {
-      setErrorMessage(
-        "Create the instant cash offer before sending the vehicle file.",
-      );
+      setErrorMessage("Create the instant cash offer before sending the vehicle file.");
       return;
     }
 
-    if (!isInternal && (!customerName.trim() || !contact.trim())) {
-      setErrorMessage(
-        "Enter your name and phone or email so the dealer can follow up on the offer.",
-      );
+    if (!customerName.trim()) {
+      setErrorMessage("Enter your name before sending the vehicle file.");
+      return;
+    }
+
+    if (!hasContact(contact)) {
+      setErrorMessage("Enter a phone number or email before sending the vehicle file.");
+      return;
+    }
+
+    if (!customerIntent.trim()) {
+      setErrorMessage("Choose what you want to do next before sending the vehicle file.");
       return;
     }
 
@@ -325,23 +381,22 @@ export default function TradeDesk({
           customerIntent,
           contact,
           customerName,
-          vin,
-          mileage,
         }),
       });
 
-      const json = await response.json();
-      if (!response.ok)
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
         throw new Error(json.error || "Could not send vehicle file.");
+      }
 
       setStatusMessage(
         json.emailed
           ? `Vehicle file sent to ${json.dealer.name}.`
-          : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active.",
+          : "Vehicle file saved. Email is disabled until RESEND_API_KEY is active."
       );
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Something went wrong.",
+        error instanceof Error ? error.message : "Something went wrong."
       );
     } finally {
       setSubmitting(false);
@@ -451,7 +506,7 @@ export default function TradeDesk({
         >
           {started
             ? currentStep.coaching
-            : "Five guided photos first. Solace reads the VIN and mileage from the scan."}
+            : "Five guided photos first. Solace reads the VIN and mileage from the scan evidence."}
         </p>
 
         <div
@@ -649,38 +704,33 @@ export default function TradeDesk({
               style={{
                 minWidth: 68,
                 textAlign: "right",
-                color: canRequestOffer ? "#047857" : red,
+                color: scanComplete ? "#047857" : red,
                 fontWeight: 900,
                 fontSize: 13,
               }}
             >
-              {canRequestOffer
+              {scanComplete
                 ? "Ready"
-                : showDetails
-                  ? `${missingItems.length} left`
-                  : `${captureSteps.length - capturedCount} left`}
+                : `${captureSteps.length - capturedCount} left`}
             </div>
           </div>
 
           {showDetails && (
             <div
               style={{
-                marginTop: 10,
                 padding: 12,
                 borderRadius: 16,
                 background: "white",
                 border: "1px solid #e2e8f0",
               }}
             >
-              <div>
-                <strong style={{ display: "block", fontSize: 13, color: dark }}>
-                  Vehicle details from scan evidence
-                </strong>
-                <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
-                  VIN and mileage are read from the uploaded VIN and odometer
-                  photos. They cannot be manually entered.
-                </p>
-              </div>
+              <strong style={{ display: "block", fontSize: 13, color: dark }}>
+                Vehicle details from scan evidence
+              </strong>
+              <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
+                VIN and mileage are read from the uploaded VIN and odometer
+                photos. They cannot be manually entered.
+              </p>
 
               <div
                 style={{
@@ -716,7 +766,7 @@ export default function TradeDesk({
                   <br />
                   <span style={{ color: detectedMileage ? dark : muted }}>
                     {detectedMileage
-                      ? displayMileage(detectedMileage) || detectedMileage
+                      ? displayMileage(detectedMileage)
                       : "Will be detected from scan"}
                   </span>
                 </div>
@@ -725,46 +775,65 @@ export default function TradeDesk({
           )}
 
           {isInternal && showDetails && (
-            <textarea
-              placeholder="Internal notes for used car manager"
-              value={managerNotes}
-              onChange={(event) => setManagerNotes(event.target.value)}
-              rows={4}
-              style={{ ...inputStyle(), marginTop: 9, resize: "vertical" }}
-            />
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: 9,
+                  marginTop: 10,
+                }}
+              >
+                <input
+                  placeholder="Salesperson"
+                  value={salesperson}
+                  onChange={(event) => setSalesperson(event.target.value)}
+                  style={inputStyle()}
+                />
+              </div>
+              <textarea
+                placeholder="Internal notes for used car manager"
+                value={managerNotes}
+                onChange={(event) => setManagerNotes(event.target.value)}
+                rows={4}
+                style={{ ...inputStyle(), marginTop: 9, resize: "vertical" }}
+              />
+            </>
           )}
 
-          <button
-            type="button"
-            disabled={submitting || !canRequestOffer}
-            onClick={createIntakeAndValue}
-            style={{
-              width: "100%",
-              marginTop: showDetails ? 11 : 13,
-              padding: 15,
-              border: "none",
-              borderRadius: 16,
-              background: isInternal ? dark : red,
-              color: "white",
-              fontSize: 15,
-              fontWeight: 900,
-              cursor: submitting
-                ? "wait"
-                : !canRequestOffer
-                  ? "not-allowed"
-                  : "pointer",
-              opacity: submitting ? 0.72 : !canRequestOffer ? 0.62 : 1,
-              boxShadow: isInternal
-                ? "0 16px 32px rgba(15,23,42,0.18)"
-                : "0 16px 32px rgba(185,28,28,0.22)",
-            }}
-          >
-            {submitting
-              ? "Working..."
-              : canRequestOffer
-                ? "Get My Instant Cash Offer"
-                : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
-          </button>
+          {!value && (
+            <button
+              type="button"
+              disabled={submitting || !canRequestOffer}
+              onClick={createIntakeAndValue}
+              style={{
+                width: "100%",
+                marginTop: showDetails ? 11 : 13,
+                padding: 15,
+                border: "none",
+                borderRadius: 16,
+                background: isInternal ? dark : red,
+                color: "white",
+                fontSize: 15,
+                fontWeight: 900,
+                cursor: submitting
+                  ? "wait"
+                  : !canRequestOffer
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: submitting ? 0.72 : !canRequestOffer ? 0.62 : 1,
+                boxShadow: isInternal
+                  ? "0 16px 32px rgba(15,23,42,0.18)"
+                  : "0 16px 32px rgba(185,28,28,0.22)",
+              }}
+            >
+              {submitting
+                ? "Working..."
+                : canRequestOffer
+                  ? "Get My Instant Cash Offer"
+                  : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
+            </button>
+          )}
         </div>
 
         {(statusMessage || errorMessage) && (
@@ -892,47 +961,6 @@ export default function TradeDesk({
               </p>
             ))}
 
-            {!isInternal && (
-              <div
-                style={{
-                  marginTop: 14,
-                  padding: 12,
-                  borderRadius: 18,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <strong
-                  style={{ display: "block", fontSize: 15, marginBottom: 9 }}
-                >
-                  Where should we send your offer?
-                </strong>
-                <p style={{ margin: "-3px 0 9px", color: muted, fontSize: 12, lineHeight: 1.4 }}>
-                  Enter your name and either a phone number or email.
-                </p>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr",
-                    gap: 9,
-                  }}
-                >
-                  <input
-                    placeholder="Name"
-                    value={customerName}
-                    onChange={(event) => setCustomerName(event.target.value)}
-                    style={inputStyle()}
-                  />
-                  <input
-                    placeholder="Phone or email"
-                    value={contact}
-                    onChange={(event) => setContact(event.target.value)}
-                    style={inputStyle()}
-                  />
-                </div>
-              </div>
-            )}
-
             <div
               style={{
                 marginTop: 14,
@@ -942,9 +970,7 @@ export default function TradeDesk({
                 border: "1px solid #e2e8f0",
               }}
             >
-              <strong
-                style={{ display: "block", fontSize: 15, marginBottom: 9 }}
-              >
+              <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>
                 What would you like to do next?
               </strong>
               <div
@@ -972,7 +998,8 @@ export default function TradeDesk({
                           : "1px solid #cbd5e1",
                       background:
                         customerIntent === intentValue ? "#fee2e2" : "white",
-                      color: customerIntent === intentValue ? "#991b1b" : dark,
+                      color:
+                        customerIntent === intentValue ? "#991b1b" : dark,
                       fontSize: 12,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -983,6 +1010,45 @@ export default function TradeDesk({
                 ))}
               </div>
             </div>
+
+            {!isInternal && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 18,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <strong style={{ display: "block", fontSize: 15 }}>
+                  Where should we send your offer?
+                </strong>
+                <p style={{ margin: "4px 0 10px", color: muted, fontSize: 13 }}>
+                  Enter your name and either a phone number or email.
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: 9,
+                  }}
+                >
+                  <input
+                    placeholder="Name"
+                    value={customerName}
+                    onChange={(event) => setCustomerName(event.target.value)}
+                    style={inputStyle()}
+                  />
+                  <input
+                    placeholder="Phone number or email"
+                    value={contact}
+                    onChange={(event) => setContact(event.target.value)}
+                    style={inputStyle()}
+                  />
+                </div>
+              </div>
+            )}
 
             {isInternal && (
               <input
@@ -995,7 +1061,7 @@ export default function TradeDesk({
 
             <button
               type="button"
-              disabled={submitting || !canSubmitVehicleFile}
+              disabled={submitting || (!isInternal && !canSubmitVehicleFile)}
               onClick={submitVehicleFile}
               style={{
                 width: "100%",
@@ -1007,16 +1073,22 @@ export default function TradeDesk({
                 color: "white",
                 fontSize: 15,
                 fontWeight: 900,
-                cursor: submitting ? "wait" : !canSubmitVehicleFile ? "not-allowed" : "pointer",
-                opacity: submitting ? 0.72 : !canSubmitVehicleFile ? 0.62 : 1,
+                cursor:
+                  submitting || (!isInternal && !canSubmitVehicleFile)
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: submitting || (!isInternal && !canSubmitVehicleFile)
+                  ? 0.62
+                  : 1,
               }}
             >
               {isInternal
                 ? "Route to Used Car Manager"
-                : customerIntent
-                  ? "Send My Vehicle File"
-                  : "Enter name and contact"}
+                : canSubmitVehicleFile
+                  ? "Send to your dealer"
+                  : "Add contact details to send"}
             </button>
+
             <button
               type="button"
               onClick={resetScan}
