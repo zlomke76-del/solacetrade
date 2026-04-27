@@ -44,6 +44,14 @@ type DecodedVehicle = {
   options: string[];
 };
 
+type VehicleFieldConfidence = "low" | "medium" | "high";
+
+type StructuredTrim = {
+  value: string | null;
+  confidence: VehicleFieldConfidence;
+  source: "vin_decode" | "vision" | "inferred" | "unknown";
+};
+
 type ExtendedSolaceValuePayload = {
   offerAmount: number | null;
   offerRangeLow: number | null;
@@ -91,6 +99,8 @@ type ExtendedSolaceValuePayload = {
     transmission?: string | null;
     series?: string | null;
     options?: string[];
+    configuration?: string[];
+    signals?: string[];
   } | null;
 };
 
@@ -196,6 +206,73 @@ function uniqueVehicleOptions(values: Array<unknown>) {
   return options;
 }
 
+function isValueRelevantOption(option: string) {
+  const text = option.toLowerCase();
+
+  return (
+    text.includes("4x4") ||
+    text.includes("4wd") ||
+    text.includes("awd") ||
+    text.includes("all wheel") ||
+    text.includes("four wheel") ||
+    text.includes("tow") ||
+    text.includes("trailer") ||
+    text.includes("roof") ||
+    text.includes("sunroof") ||
+    text.includes("moonroof") ||
+    text.includes("pano") ||
+    text.includes("leather") ||
+    text.includes("navigation") ||
+    text.includes("nav") ||
+    text.includes("premium") ||
+    text.includes("audio") ||
+    text.includes("speaker") ||
+    text.includes("heated") ||
+    text.includes("cooled") ||
+    text.includes("ventilated") ||
+    text.includes("adaptive") ||
+    text.includes("camera") ||
+    text.includes("blind spot") ||
+    text.includes("driver assist") ||
+    text.includes("safety") ||
+    text.includes("limited") ||
+    text.includes("overland") ||
+    text.includes("summit") ||
+    text.includes("trailhawk") ||
+    text.includes("altitude") ||
+    text.includes("high altitude") ||
+    text.includes("luxury") ||
+    text.includes("package")
+  );
+}
+
+function buildStructuredTrim(
+  decodedVehicle: DecodedVehicle | null,
+  parsedTrim: string | null
+): StructuredTrim {
+  if (decodedVehicle?.trim) {
+    return {
+      value: decodedVehicle.trim,
+      confidence: "high",
+      source: "vin_decode",
+    };
+  }
+
+  if (parsedTrim) {
+    return {
+      value: parsedTrim,
+      confidence: "medium",
+      source: "vision",
+    };
+  }
+
+  return {
+    value: null,
+    confidence: "low",
+    source: "unknown",
+  };
+}
+
 async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null> {
   const clean = cleanVin(vin);
 
@@ -256,18 +333,12 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
       options: uniqueVehicleOptions([
         trim,
         series,
-        bodyClass,
         driveType,
         engine,
-        fuelType,
         transmission,
-        doors ? `${doors} doors` : null,
-        result.VehicleType,
-        result.GVWR,
-        result.BrakeSystemType,
         result.OtherEngineInfo,
         result.OtherRestraintSystemInfo,
-      ]),
+      ]).filter(isValueRelevantOption),
     };
   } catch (error) {
     console.error("SolaceTrade VIN decode failed", {
@@ -371,7 +442,8 @@ Your task:
 1. Read the VIN from the VIN image if visible.
 2. Read the mileage from the odometer image if visible.
 3. Review the exterior photos for visible condition signals.
-4. Produce a conservative instant cash offer payload for dealer review.
+4. Identify visible value-relevant option signals only.
+5. Produce a conservative instant cash offer payload for dealer review.
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -422,7 +494,8 @@ Rules:
 - If VIN is not visible, detectedVin must be null.
 - If mileage is not visible, detectedMileage must be null.
 - If year, make, model, trim, body class, drivetrain, engine, fuel type, doors, transmission, series, or options are not visible from the image evidence, set them to null or [] as appropriate. The server will decode stable fields from the detected VIN when possible.
-- Use optionSignals for visible equipment clues from photos only, such as badging, wheel style, sunroof, tow package, 4x4/AWD badge, interior screen, leather, roof rails, or driver-assist sensors.
+- Use optionSignals for visible price-impacting equipment clues from photos only, such as badging, wheel style, sunroof, panoramic roof, tow package, 4x4/AWD badge, leather, premium audio, navigation, roof rails, or driver-assist sensors.
+- Do not use optionSignals for generic facts like doors, fuel type, body class, brake type, vehicle class, hydraulic brakes, GVWR, or MPV/SUV classification.
 - Do not invent VIN, mileage, year, make, model, trim, drivetrain, engine, packages, or options.
 - If VIN or mileage cannot be read, admissibility should be PARTIAL.
 - Keep summaryLines customer-friendly.
@@ -521,7 +594,9 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     }
 
     const rawText = extractMessageText(gatewayJson);
-    const parsed = parseSolaceValue(safeJsonText(rawText)) as ExtendedSolaceValuePayload;
+    const parsed = parseSolaceValue(
+      safeJsonText(rawText)
+    ) as ExtendedSolaceValuePayload;
 
     const detectedVin = cleanVin(
       parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
@@ -539,6 +614,10 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       ? await decodeVehicleFromVin(detectedVin)
       : null;
 
+    const parsedTrim = cleanVehicleText(
+      parsed.vehicleTrim || parsed.trim || parsed.vehicle?.trim
+    );
+
     const vehicleYear =
       decodedVehicle?.year ||
       cleanVehicleText(parsed.vehicleYear || parsed.year || parsed.vehicle?.year);
@@ -548,9 +627,8 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     const vehicleModel =
       decodedVehicle?.model ||
       cleanVehicleText(parsed.vehicleModel || parsed.model || parsed.vehicle?.model);
-    const vehicleTrim =
-      decodedVehicle?.trim ||
-      cleanVehicleText(parsed.vehicleTrim || parsed.trim || parsed.vehicle?.trim);
+    const vehicleTrim = decodedVehicle?.trim || parsedTrim;
+    const vehicleTrimDetail = buildStructuredTrim(decodedVehicle, parsedTrim);
     const vehicleBodyClass =
       decodedVehicle?.bodyClass ||
       cleanVehicleText(parsed.vehicleBodyClass || parsed.vehicle?.bodyClass);
@@ -572,18 +650,28 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     const vehicleSeries =
       decodedVehicle?.series ||
       cleanVehicleText(parsed.vehicleSeries || parsed.vehicle?.series);
-    const optionSignals = uniqueVehicleOptions(parsed.optionSignals || []);
+
+    const optionSignals = uniqueVehicleOptions(parsed.optionSignals || []).filter(
+      isValueRelevantOption
+    );
+
+    const vehicleConfiguration = uniqueVehicleOptions([
+      vehicleDriveType,
+      vehicleEngine,
+      vehicleTransmission,
+    ]);
+
     const vehicleOptions = uniqueVehicleOptions([
       decodedVehicle?.options || [],
       parsed.vehicleOptions || [],
       parsed.vehicle?.options || [],
       optionSignals,
       vehicleTrim,
+    ]).filter(isValueRelevantOption);
+
+    const vehicleSignals = uniqueVehicleOptions([
       vehicleBodyClass,
-      vehicleDriveType,
-      vehicleEngine,
       vehicleFuelType,
-      vehicleTransmission,
       vehicleDoors ? `${vehicleDoors} doors` : null,
       vehicleSeries,
     ]);
@@ -598,6 +686,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       vehicleMake,
       vehicleModel,
       vehicleTrim,
+      vehicleTrimDetail,
       vehicleBodyClass,
       vehicleDriveType,
       vehicleEngine,
@@ -605,8 +694,13 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       vehicleDoors,
       vehicleTransmission,
       vehicleSeries,
+      vehicleConfiguration,
       vehicleOptions,
+      vehicleSignals,
       optionSignals,
+      configuration: vehicleConfiguration,
+      options: vehicleOptions,
+      signals: vehicleSignals,
       year: vehicleYear,
       make: vehicleMake,
       model: vehicleModel,
@@ -618,6 +712,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         make: vehicleMake,
         model: vehicleModel,
         trim: vehicleTrim,
+        trimDetail: vehicleTrimDetail,
         bodyClass: vehicleBodyClass,
         driveType: vehicleDriveType,
         engine: vehicleEngine,
@@ -625,7 +720,9 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         doors: vehicleDoors,
         transmission: vehicleTransmission,
         series: vehicleSeries,
+        configuration: vehicleConfiguration,
         options: vehicleOptions,
+        signals: vehicleSignals,
       },
       title:
         parsed.title ||
@@ -668,6 +765,10 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           make: vehicleMake,
           model: vehicleModel,
           trim: vehicleTrim,
+          trimDetail: vehicleTrimDetail,
+          configuration: vehicleConfiguration,
+          options: vehicleOptions,
+          signals: vehicleSignals,
         },
         offerAmount: valuePayload.offerAmount,
         confidence: valuePayload.confidence,
