@@ -35,6 +35,7 @@ export default function InternalTradeDeskPage() {
         >
           Internal Dealer Mode
         </div>
+
         <h1
           style={{
             margin: "0 0 8px",
@@ -45,15 +46,24 @@ export default function InternalTradeDeskPage() {
         >
           Sales-floor vehicle evaluation packet.
         </h1>
-        <p style={{ margin: 0, maxWidth: 760, color: "#cbd5e1", lineHeight: 1.6 }}>
-          Capture the vehicle, flag missing state, and route a structured evaluation file
-          to the used car manager. Internal mode allows submission with incomplete state,
-          but clearly marks the packet as incomplete.
+
+        <p
+          style={{
+            margin: 0,
+            maxWidth: 760,
+            color: "#cbd5e1",
+            lineHeight: 1.6,
+          }}
+        >
+          Capture the vehicle, flag missing state, and route a structured
+          evaluation file to the used car manager. Internal mode allows
+          submission with incomplete state, but clearly marks the packet as
+          incomplete.
         </p>
       </section>
 
       <section style={{ maxWidth: 900, margin: "0 auto", paddingBottom: 36 }}>
-        <TradeDesk mode="internal" />
+        <TradeDesk mode="internal" dealerSlug="brenhamcdjr" />
       </section>
     </main>
   );
