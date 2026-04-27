@@ -287,6 +287,7 @@ export default function TradeDesk({
   const [contact, setContact] = useState("");
   const [salesperson, setSalesperson] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [dealNumber, setDealNumber] = useState("");
   const [managerNotes, setManagerNotes] = useState("");
   const [customerIntent, setCustomerIntent] = useState("");
   const [intakeId, setIntakeId] = useState<string | null>(null);
@@ -305,12 +306,21 @@ export default function TradeDesk({
   const detectedMileage = mileage.trim() || getValueMileage(value);
   const detectedVehicle = getValueVehicle(value);
   const detectedVehicleLabel = getValueVehicleLabel(value);
-  const canRequestOffer = scanComplete && !value;
-  const canSubmitVehicleFile =
-    Boolean(value) &&
-    customerName.trim().length > 0 &&
-    isValidEmail(contact) &&
-    customerIntent.trim().length > 0;
+  const canRequestOffer = isInternal
+    ? scanComplete &&
+      !value &&
+      customerName.trim().length > 0 &&
+      dealNumber.trim().length > 0
+    : scanComplete && !value;
+  const canSubmitVehicleFile = isInternal
+    ? Boolean(value) &&
+      customerName.trim().length > 0 &&
+      dealNumber.trim().length > 0 &&
+      isValidEmail(contact)
+    : Boolean(value) &&
+      customerName.trim().length > 0 &&
+      isValidEmail(contact) &&
+      customerIntent.trim().length > 0;
 
   const missingPhotoLabels = useMemo(() => {
     return captureSteps
@@ -382,10 +392,18 @@ export default function TradeDesk({
 
       // Do not send manual VIN or mileage. The value route must derive them
       // from the uploaded VIN and odometer evidence.
-      formData.append("customerName", "");
+      formData.append("customerName", isInternal ? customerName : "");
       formData.append("contact", "");
+      formData.append("dealNumber", isInternal ? dealNumber : "");
       formData.append("salesperson", isInternal ? salesperson : "");
-      formData.append("managerNotes", isInternal ? managerNotes : "");
+      formData.append(
+        "managerNotes",
+        isInternal
+          ? [dealNumber ? `Deal #: ${dealNumber}` : "", managerNotes]
+              .filter(Boolean)
+              .join("\n")
+          : ""
+      );
 
       appendEvidencePhotos(formData);
 
@@ -408,7 +426,9 @@ export default function TradeDesk({
 
       setIntakeId(intakeJson.intakeId);
       setStatusMessage(
-        "Solace is reading the scan evidence and producing the instant cash offer..."
+        isInternal
+          ? "Solace is reading the scan evidence and building the manager review packet..."
+          : "Solace is reading the scan evidence and producing the instant cash offer..."
       );
 
       const valueResponse = await fetch(
@@ -433,7 +453,7 @@ export default function TradeDesk({
       if (nextMileage) setMileage(nextMileage);
 
       setValue(nextValue);
-      setStatusMessage("Instant cash offer ready.");
+      setStatusMessage(isInternal ? "Manager review packet ready." : "Instant cash offer ready.");
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong."
@@ -449,21 +469,38 @@ export default function TradeDesk({
     setStatusMessage("");
 
     if (!intakeId) {
-      setErrorMessage("Create the instant cash offer before sending the vehicle file.");
+      setErrorMessage(
+        isInternal
+          ? "Create the manager review packet before routing it."
+          : "Create the instant cash offer before sending the vehicle file."
+      );
       return;
     }
 
     if (!customerName.trim()) {
-      setErrorMessage("Enter your name before sending the vehicle file.");
+      setErrorMessage(
+        isInternal
+          ? "Enter the customer name before routing the packet."
+          : "Enter your name before sending the vehicle file."
+      );
+      return;
+    }
+
+    if (isInternal && !dealNumber.trim()) {
+      setErrorMessage("Enter the deal number before routing the packet.");
       return;
     }
 
     if (!isValidEmail(contact)) {
-      setErrorMessage("Enter a valid email to receive your trade certificate.");
+      setErrorMessage(
+        isInternal
+          ? "Enter a valid used car manager email."
+          : "Enter a valid email to receive your trade certificate."
+      );
       return;
     }
 
-    if (!customerIntent.trim()) {
+    if (!isInternal && !customerIntent.trim()) {
       setErrorMessage("Choose what you want to do next before sending the vehicle file.");
       return;
     }
@@ -476,9 +513,13 @@ export default function TradeDesk({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           intakeId,
-          customerIntent,
+          customerIntent: isInternal ? "manager_review" : customerIntent,
           contact,
           customerName,
+          dealNumber: isInternal ? dealNumber : undefined,
+          salesperson: isInternal ? salesperson : undefined,
+          managerNotes: isInternal ? managerNotes : undefined,
+          mode,
         }),
       });
 
@@ -488,9 +529,13 @@ export default function TradeDesk({
       }
 
       setStatusMessage(
-        json.emailed
-          ? `Trade certificate sent to ${contact.trim()}.`
-          : "Trade certificate saved. Email is disabled until RESEND_API_KEY is active."
+        isInternal
+          ? json.emailed
+            ? `Manager review packet routed to ${contact.trim()}.`
+            : "Manager review packet saved. Email is disabled until RESEND_API_KEY is active."
+          : json.emailed
+            ? `Trade certificate sent to ${contact.trim()}.`
+            : "Trade certificate saved. Email is disabled until RESEND_API_KEY is active."
       );
     } catch (error) {
       setErrorMessage(
@@ -510,6 +555,7 @@ export default function TradeDesk({
     setContact("");
     setSalesperson("");
     setCustomerName("");
+    setDealNumber("");
     setManagerNotes("");
     setCustomerIntent("");
     setIntakeId(null);
@@ -920,6 +966,18 @@ export default function TradeDesk({
                 }}
               >
                 <input
+                  placeholder="Customer name"
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  style={inputStyle()}
+                />
+                <input
+                  placeholder="Deal number"
+                  value={dealNumber}
+                  onChange={(event) => setDealNumber(event.target.value)}
+                  style={inputStyle()}
+                />
+                <input
                   placeholder="Salesperson"
                   value={salesperson}
                   onChange={(event) => setSalesperson(event.target.value)}
@@ -965,8 +1023,12 @@ export default function TradeDesk({
               {submitting
                 ? "Working..."
                 : canRequestOffer
-                  ? "Get My Instant Cash Offer"
-                  : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
+                  ? isInternal
+                    ? "Create Manager Review Packet"
+                    : "Get My Instant Cash Offer"
+                  : isInternal && scanComplete && (!customerName.trim() || !dealNumber.trim())
+                    ? "Add customer name and deal number"
+                    : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
             </button>
           )}
         </div>
@@ -1021,7 +1083,7 @@ export default function TradeDesk({
                   background: red,
                 }}
               />
-              Solace Response
+              {isInternal ? "Manager Packet" : "Solace Response"}
             </div>
 
             <strong
@@ -1032,30 +1094,64 @@ export default function TradeDesk({
                 lineHeight: 1.05,
               }}
             >
-              {value.title ||
-                `Instant cash offer: ${formatMoney(value.offerAmount)}`}
+              {isInternal
+                ? "Used Car Manager Review Packet"
+                : value.title ||
+                  `Instant cash offer: ${formatMoney(value.offerAmount)}`}
             </strong>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gridTemplateColumns: isInternal
+                  ? "repeat(4, minmax(0, 1fr))"
+                  : "repeat(3, minmax(0, 1fr))",
                 gap: 8,
                 marginTop: 12,
               }}
             >
-              <span
-                style={{
-                  padding: 10,
-                  borderRadius: 13,
-                  background: "#f8fafc",
-                  fontSize: 12,
-                }}
-              >
-                <strong>Offer</strong>
-                <br />
-                {formatMoney(value.offerAmount)}
-              </span>
+              {!isInternal && (
+                <span
+                  style={{
+                    padding: 10,
+                    borderRadius: 13,
+                    background: "#f8fafc",
+                    fontSize: 12,
+                  }}
+                >
+                  <strong>Offer</strong>
+                  <br />
+                  {formatMoney(value.offerAmount)}
+                </span>
+              )}
+              {isInternal && (
+                <>
+                  <span
+                    style={{
+                      padding: 10,
+                      borderRadius: 13,
+                      background: "#f8fafc",
+                      fontSize: 12,
+                    }}
+                  >
+                    <strong>Customer</strong>
+                    <br />
+                    {customerName || "Required"}
+                  </span>
+                  <span
+                    style={{
+                      padding: 10,
+                      borderRadius: 13,
+                      background: "#f8fafc",
+                      fontSize: 12,
+                    }}
+                  >
+                    <strong>Deal #</strong>
+                    <br />
+                    {dealNumber || "Required"}
+                  </span>
+                </>
+              )}
               <span
                 style={{
                   padding: 10,
@@ -1189,18 +1285,19 @@ export default function TradeDesk({
               </p>
             ))}
 
-            <div
-              style={{
-                marginTop: 14,
-                padding: 12,
-                borderRadius: 18,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-              }}
-            >
-              <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>
-                What would you like to do next?
-              </strong>
+            {!isInternal && (
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 12,
+                  borderRadius: 18,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>
+                  What would you like to do next?
+                </strong>
               <div
                 style={{
                   display: "grid",
@@ -1238,6 +1335,7 @@ export default function TradeDesk({
                 ))}
               </div>
             </div>
+            )}
 
             {!isInternal && (
               <div
@@ -1279,17 +1377,53 @@ export default function TradeDesk({
             )}
 
             {isInternal && (
-              <input
-                placeholder="Manager email or routing contact"
-                value={contact}
-                onChange={(event) => setContact(event.target.value)}
-                style={{ ...inputStyle(), marginTop: 12 }}
-              />
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 18,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <strong style={{ display: "block", fontSize: 15 }}>
+                  Route packet for manager approval
+                </strong>
+                <p style={{ margin: "4px 0 10px", color: muted, fontSize: 13 }}>
+                  Confirm the customer, deal number, and used car manager email.
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: 9,
+                  }}
+                >
+                  <input
+                    placeholder="Customer name"
+                    value={customerName}
+                    onChange={(event) => setCustomerName(event.target.value)}
+                    style={inputStyle()}
+                  />
+                  <input
+                    placeholder="Deal number"
+                    value={dealNumber}
+                    onChange={(event) => setDealNumber(event.target.value)}
+                    style={inputStyle()}
+                  />
+                  <input
+                    placeholder="Used car manager email"
+                    value={contact}
+                    onChange={(event) => setContact(event.target.value)}
+                    style={inputStyle()}
+                  />
+                </div>
+              </div>
             )}
 
             <button
               type="button"
-              disabled={submitting || (!isInternal && !canSubmitVehicleFile)}
+              disabled={submitting || !canSubmitVehicleFile}
               onClick={submitVehicleFile}
               style={{
                 width: "100%",
@@ -1302,16 +1436,16 @@ export default function TradeDesk({
                 fontSize: 15,
                 fontWeight: 900,
                 cursor:
-                  submitting || (!isInternal && !canSubmitVehicleFile)
+                  submitting || !canSubmitVehicleFile
                     ? "not-allowed"
                     : "pointer",
-                opacity: submitting || (!isInternal && !canSubmitVehicleFile)
-                  ? 0.62
-                  : 1,
+                opacity: submitting || !canSubmitVehicleFile ? 0.62 : 1,
               }}
             >
               {isInternal
-                ? "Route to Used Car Manager"
+                ? canSubmitVehicleFile
+                  ? "Route to Used Car Manager"
+                  : "Add customer, deal #, and manager email"
                 : canSubmitVehicleFile
                   ? "Get my trade certificate"
                   : "Add name, email, and next step"}
