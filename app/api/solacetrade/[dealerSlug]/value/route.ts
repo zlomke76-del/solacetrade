@@ -64,9 +64,7 @@ function extractMessageText(payload: unknown) {
 
 function safeJsonText(text: string) {
   const trimmed = text.trim();
-
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
-
   const match = trimmed.match(/\{[\s\S]*\}/);
   return match?.[0] || trimmed;
 }
@@ -75,10 +73,7 @@ function findSignedUrl(
   signedPhotos: Array<{ path: string; signedUrl: string | null }>,
   stepKey: string
 ) {
-  return (
-    signedPhotos.find((photo) => photo.path.includes(`/${stepKey}.`))
-      ?.signedUrl || null
-  );
+  return signedPhotos.find((photo) => photo.path.includes(`/${stepKey}.`))?.signedUrl || null;
 }
 
 export async function POST(
@@ -101,21 +96,18 @@ export async function POST(
     const intakeId = cleanText(body.intakeId, 80);
 
     if (!intakeId) {
-      return NextResponse.json(
-        { error: "intakeId is required." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "intakeId is required." }, { status: 400 });
     }
 
-    const { data: intake, error: intakeError } = await supabaseAdmin
+    const { data: intakeData, error: intakeError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
-      .select(
-        "id, dealer_id, customer_name, customer_contact, vin, mileage, mode, manager_notes, photo_paths"
-      )
+      .select("id, dealer_id, customer_name, customer_contact, vin, mileage, mode, manager_notes, photo_paths")
       .eq("id", intakeId)
       .eq("dealer_id", dealer.id)
-      .single<TradeIntake>();
+      .single();
+
+    const intake = intakeData as TradeIntake | null;
 
     if (intakeError || !intake) {
       return NextResponse.json(
@@ -137,20 +129,22 @@ export async function POST(
     }
 
     const photos = (photoRows || []) as TradePhoto[];
+    const requiredSteps = ["front", "driverSide", "rear", "odometer", "vin"];
+    const receivedSteps = photos.map((photo) => photo.step_key);
+    const missingSteps = requiredSteps.filter((step) => !receivedSteps.includes(step));
 
-    if (photos.length < 5) {
+    if (missingSteps.length > 0) {
       return NextResponse.json(
         {
-          error:
-            "All five guided vehicle photos are required before Solace can produce an offer.",
+          error: "All five guided vehicle photos are required before Solace can produce an offer.",
+          receivedSteps,
+          missingSteps,
         },
         { status: 400 }
       );
     }
 
-    const signedPhotos = await createSignedPhotoUrls(
-      photos.map((photo) => photo.storage_path)
-    );
+    const signedPhotos = await createSignedPhotoUrls(photos.map((photo) => photo.storage_path));
 
     const frontUrl = findSignedUrl(signedPhotos, "front");
     const driverSideUrl = findSignedUrl(signedPhotos, "driverSide");
@@ -158,22 +152,29 @@ export async function POST(
     const odometerUrl = findSignedUrl(signedPhotos, "odometer");
     const vinUrl = findSignedUrl(signedPhotos, "vin");
 
+    if (!odometerUrl || !vinUrl) {
+      return NextResponse.json(
+        { error: "VIN and odometer image evidence are required before Solace can produce an offer." },
+        { status: 400 }
+      );
+    }
+
     const photoManifest = photos.map((photo) => ({
       stepKey: photo.step_key,
-      hasSignedUrl: Boolean(
-        signedPhotos.find((signed) => signed.path === photo.storage_path)
-          ?.signedUrl
-      ),
+      hasSignedUrl: Boolean(signedPhotos.find((signed) => signed.path === photo.storage_path)?.signedUrl),
     }));
 
     const prompt = `
 You are SolaceTrade, a dealer trade-intake assistant.
 
+You must use image evidence only for VIN and mileage.
+The customer is not allowed to manually enter VIN or mileage.
+
 Your task:
 1. Read the VIN from the VIN image if visible.
 2. Read the mileage from the odometer image if visible.
 3. Review the exterior photos for visible condition signals.
-4. Produce a conservative instant cash offer payload for dealer review.
+4. Produce a conservative instant cash offer payload only if VIN and mileage are both readable from image evidence.
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -196,13 +197,13 @@ Return ONLY valid JSON with this exact shape:
 }
 
 Rules:
+- Do not invent VIN or mileage.
 - If VIN is not visible, detectedVin must be null.
 - If mileage is not visible, detectedMileage must be null.
-- Do not invent VIN or mileage.
-- If VIN or mileage cannot be read, admissibility should be PARTIAL.
+- If VIN or mileage cannot be read, offerAmount and range fields must be null, admissibility must be DENY, and missingItems must say which photo must be retaken.
+- If VIN and mileage are readable, admissibility may be PASS or PARTIAL depending on condition visibility.
 - Keep summaryLines customer-friendly.
 - Keep dealerReviewNotes operational and concise.
-- The offer may be conservative and preliminary, but should be framed as an instant cash offer pending dealer verification.
 - Do not include markdown.
 - Do not include text outside JSON.
 
@@ -213,49 +214,16 @@ ${dealer.city || ""}, ${dealer.state || ""}
 Existing intake data:
 Customer name: ${intake.customer_name || "not provided"}
 Customer contact: ${intake.customer_contact || "not provided"}
-Manual VIN: ${intake.vin || "not provided"}
-Manual mileage: ${intake.mileage || "not provided"}
 Mode: ${intake.mode || "customer"}
 Photo manifest: ${JSON.stringify(photoManifest)}
 `.trim();
 
-    const content: Array<Record<string, unknown>> = [
-      { type: "text", text: prompt },
-    ];
+    const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
 
-    if (frontUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: frontUrl },
-      });
-    }
-
-    if (driverSideUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: driverSideUrl },
-      });
-    }
-
-    if (rearUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: rearUrl },
-      });
-    }
-
-    if (odometerUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: odometerUrl },
-      });
-    }
-
-    if (vinUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: vinUrl },
-      });
+    for (const url of [frontUrl, driverSideUrl, rearUrl, odometerUrl, vinUrl]) {
+      if (url) {
+        content.push({ type: "image_url", image_url: { url } });
+      }
     }
 
     const response = await fetch(gatewayUrl, {
@@ -266,13 +234,8 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       },
       body: JSON.stringify({
         model: getModel(),
-        messages: [
-          {
-            role: "user",
-            content,
-          },
-        ],
-        temperature: 0.2,
+        messages: [{ role: "user", content }],
+        temperature: 0.1,
         max_tokens: 900,
       }),
     });
@@ -288,8 +251,8 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       return NextResponse.json(
         {
           error:
-            (gatewayJson as { error?: { message?: string } })?.error
-              ?.message || "AI Gateway value request failed.",
+            (gatewayJson as { error?: { message?: string } })?.error?.message ||
+            "AI Gateway value request failed.",
         },
         { status: 500 }
       );
@@ -298,37 +261,52 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     const rawText = extractMessageText(gatewayJson);
     const parsed = parseSolaceValue(safeJsonText(rawText));
 
-    const detectedVin = cleanVin(
-      parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
-    );
-
+    const detectedVin = cleanVin(parsed.detectedVin || parsed.vin || parsed.vehicle?.vin);
     const detectedMileage =
-      cleanMileage(
-        parsed.detectedMileage ||
-          parsed.mileage ||
-          parsed.vehicle?.mileage ||
-          intake.mileage
-      ) || null;
+      cleanMileage(parsed.detectedMileage || parsed.mileage || parsed.vehicle?.mileage) || null;
 
-    const valuePayload = {
-      ...parsed,
-      detectedVin: detectedVin || null,
-      detectedMileage,
-      vin: detectedVin || null,
-      mileage: detectedMileage,
-      vehicle: {
-        vin: detectedVin || null,
-        mileage: detectedMileage,
-      },
-      title:
-        parsed.title ||
-        `Instant cash offer: ${formatMoney(parsed.offerAmount)}`,
-    };
+    const evidenceSufficient = detectedVin.length >= 11 && Boolean(detectedMileage);
+
+    const valuePayload = evidenceSufficient
+      ? {
+          ...parsed,
+          detectedVin,
+          detectedMileage,
+          vin: detectedVin,
+          mileage: detectedMileage,
+          vehicle: { vin: detectedVin, mileage: detectedMileage },
+          title: parsed.title || `Instant cash offer: ${formatMoney(parsed.offerAmount)}`,
+        }
+      : {
+          ...parsed,
+          offerAmount: null,
+          offerRangeLow: null,
+          offerRangeHigh: null,
+          title: "We need a clearer VIN or odometer photo before producing an instant cash offer.",
+          confidence: "Low" as const,
+          admissibility: "DENY" as const,
+          summaryLines: [
+            "Solace could not verify both VIN and mileage from the image evidence.",
+            "Please retake the unreadable VIN or odometer photo so the offer can be based on proof, not manual entry.",
+          ],
+          missingItems: [
+            ...(detectedVin.length >= 11 ? [] : ["Retake VIN photo"]),
+            ...(detectedMileage ? [] : ["Retake odometer photo"]),
+          ],
+          dealerReviewNotes: [
+            "No instant offer should be quoted until VIN and mileage are evidence-derived from images.",
+          ],
+          detectedVin: detectedVin || null,
+          detectedMileage,
+          vin: detectedVin || null,
+          mileage: detectedMileage,
+          vehicle: { vin: detectedVin || null, mileage: detectedMileage },
+        };
 
     const updatePayload = {
-      status: "valued",
-      vin: detectedVin || intake.vin || null,
-      mileage: detectedMileage || intake.mileage || null,
+      status: evidenceSufficient ? "valued" : "needs_evidence",
+      vin: evidenceSufficient ? detectedVin : null,
+      mileage: evidenceSufficient ? detectedMileage : null,
       llm_summary: valuePayload.summaryLines?.join("\n") || null,
       offer_amount: valuePayload.offerAmount,
       offer_range_low: valuePayload.offerRangeLow,
@@ -351,7 +329,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     await logTradeEvent({
       dealerId: dealer.id,
       intakeId: intake.id,
-      eventType: "value_created",
+      eventType: evidenceSufficient ? "value_created" : "value_denied_needs_evidence",
       payload: {
         model: getModel(),
         hasDetectedVin: Boolean(detectedVin),
@@ -372,9 +350,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       value: valuePayload,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown value error.";
-
+    const message = error instanceof Error ? error.message : "Unknown value error.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
