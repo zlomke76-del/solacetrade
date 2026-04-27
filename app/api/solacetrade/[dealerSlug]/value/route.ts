@@ -62,6 +62,15 @@ type DamageFlag = {
   note: string | null;
 };
 
+type ExecutionAdmissibility = {
+  allowed: boolean;
+  customerCertificatePermitted: boolean;
+  managerReviewPermitted: boolean;
+  reasons: string[];
+  checkedAt: string;
+  enforcement: "fail_closed";
+};
+
 type ExtendedSolaceValuePayload = {
   offerAmount: number | null;
   offerRangeLow: number | null;
@@ -75,6 +84,7 @@ type ExtendedSolaceValuePayload = {
   visualConditionConfidence?: VisualConditionConfidence;
   damageFlags?: DamageFlag[];
   inspectionRequired?: boolean;
+  executionAdmissibility?: ExecutionAdmissibility;
   missingItems?: string[];
   dealerReviewNotes?: string[];
   detectedVin?: string | null;
@@ -355,6 +365,78 @@ function requiresInspection({
     (conditionScore !== null && conditionScore <= 2) ||
     hasModerateOrMajorDamage
   );
+}
+
+
+function getCleanStringArray(value: unknown, maxItems = 12) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => cleanVehicleText(item))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, maxItems);
+}
+
+function buildExecutionAdmissibility(input: {
+  mode: string | null;
+  photoCount: number;
+  detectedVin: string;
+  detectedMileage: number | null;
+  offerAmount: number | null;
+  confidence?: "Low" | "Medium" | "High";
+  admissibility?: "PASS" | "PARTIAL" | "DENY";
+  missingItems?: string[];
+  inspectionRequired: boolean;
+  visualConditionConfidence: VisualConditionConfidence;
+}) : ExecutionAdmissibility {
+  const reasons: string[] = [];
+
+  if (input.photoCount < 5) {
+    reasons.push("All five guided photos are required.");
+  }
+
+  if (!input.detectedVin || input.detectedVin.length !== 17) {
+    reasons.push("VIN was not detected with sufficient confidence.");
+  }
+
+  if (!input.detectedMileage) {
+    reasons.push("Mileage was not detected with sufficient confidence.");
+  }
+
+  if (!input.offerAmount || !Number.isFinite(input.offerAmount)) {
+    reasons.push("Offer amount was not produced from sufficient state.");
+  }
+
+  if (input.confidence === "Low") {
+    reasons.push("Solace confidence is low.");
+  }
+
+  if (input.admissibility !== "PASS") {
+    reasons.push("Solace did not mark the valuation state as PASS.");
+  }
+
+  if (input.visualConditionConfidence === "Low") {
+    reasons.push("Visual condition confidence is low.");
+  }
+
+  if (input.inspectionRequired) {
+    reasons.push("Dealer inspection is required before a certificate can be executed.");
+  }
+
+  for (const item of input.missingItems || []) {
+    if (item && !reasons.includes(item)) reasons.push(item);
+  }
+
+  const allowed = reasons.length === 0;
+
+  return {
+    allowed,
+    customerCertificatePermitted: allowed && input.mode !== "internal",
+    managerReviewPermitted: true,
+    reasons,
+    checkedAt: new Date().toISOString(),
+    enforcement: "fail_closed",
+  };
 }
 
 function buildDamageConditionNotes(
@@ -721,9 +803,24 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     }
 
     const rawText = extractMessageText(gatewayJson);
-    const parsed = parseSolaceValue(
-      safeJsonText(rawText)
-    ) as ExtendedSolaceValuePayload;
+    const jsonText = safeJsonText(rawText);
+    const baseParsed = parseSolaceValue(jsonText);
+    let rawParsed: Partial<ExtendedSolaceValuePayload> = {};
+
+    try {
+      rawParsed = JSON.parse(jsonText) as Partial<ExtendedSolaceValuePayload>;
+    } catch {
+      rawParsed = {};
+    }
+
+    const parsed = {
+      ...rawParsed,
+      ...baseParsed,
+      vehicle: {
+        ...(rawParsed.vehicle || {}),
+        ...(baseParsed.vehicle || {}),
+      },
+    } as ExtendedSolaceValuePayload;
 
     const detectedVin = cleanVin(
       parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
@@ -829,6 +926,26 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       );
     }
 
+    const missingItems = getCleanStringArray(parsed.missingItems);
+    const executionAdmissibility = buildExecutionAdmissibility({
+      mode: intake.mode,
+      photoCount: photos.length,
+      detectedVin,
+      detectedMileage,
+      offerAmount: parsed.offerAmount,
+      confidence: parsed.confidence,
+      admissibility: parsed.admissibility,
+      missingItems,
+      inspectionRequired,
+      visualConditionConfidence,
+    });
+
+    if (!executionAdmissibility.allowed) {
+      dealerReviewNotes.push(
+        `Execution blocked until state is sufficient: ${executionAdmissibility.reasons.join(" ")}`
+      );
+    }
+
     const valuePayload = {
       ...parsed,
       detectedVin: detectedVin || null,
@@ -837,6 +954,8 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       visualConditionConfidence,
       damageFlags,
       inspectionRequired,
+      executionAdmissibility,
+      missingItems,
       conditionNotes,
       dealerReviewNotes,
       vin: detectedVin || null,
@@ -935,6 +1054,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           inspectionRequired,
           damageFlagCount: damageFlags.length,
         },
+        executionAdmissibility,
         offerAmount: valuePayload.offerAmount,
         confidence: valuePayload.confidence,
         admissibility: valuePayload.admissibility,
