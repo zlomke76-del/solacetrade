@@ -1,10 +1,9 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   cleanText,
+  createSignedPhotoUrls,
   formatMoney,
   getDealerBySlug,
   logTradeEvent,
@@ -35,22 +34,22 @@ export async function POST(
     const dealer = await getDealerBySlug(dealerSlug);
     const body = await request.json().catch(() => ({}));
 
-    const intakeId = cleanText(body.intakeId, 80);
-    const customerName = cleanText(body.customerName, 160);
-    const email = cleanText(body.contact, 180);
-    const intent = cleanText(body.customerIntent, 80);
+    const intakeId = cleanText(body?.intakeId, 80);
+    const customerName = cleanText(body?.customerName, 160);
+    const email = cleanText(body?.contact, 180);
+    const customerIntent = cleanText(body?.customerIntent, 80);
 
     if (!intakeId) {
       return NextResponse.json({ error: "Missing intakeId." }, { status: 400 });
     }
 
     if (!customerName) {
-      return NextResponse.json({ error: "Name required." }, { status: 400 });
+      return NextResponse.json({ error: "Name is required." }, { status: 400 });
     }
 
     if (!isValidEmail(email)) {
       return NextResponse.json(
-        { error: "Valid email required." },
+        { error: "Enter a valid email to receive your trade certificate." },
         { status: 400 }
       );
     }
@@ -64,21 +63,27 @@ export async function POST(
       .single();
 
     if (!intake) {
-      return NextResponse.json({ error: "Intake not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Trade intake not found." },
+        { status: 404 }
+      );
     }
 
     const certificateId = generateCertificateId();
 
-    const offer =
-      intake.offer_amount ||
-      intake.value_payload?.offerAmount ||
-      null;
+    const valuePayload =
+      intake.value_payload && typeof intake.value_payload === "object"
+        ? intake.value_payload
+        : {};
+
+    const offerAmount =
+      intake.offer_amount ?? valuePayload.offerAmount ?? null;
 
     const vehicleLabel = [
-      intake.value_payload?.vehicleYear,
-      intake.value_payload?.vehicleMake,
-      intake.value_payload?.vehicleModel,
-      intake.value_payload?.vehicleTrim,
+      valuePayload.vehicleYear,
+      valuePayload.vehicleMake,
+      valuePayload.vehicleModel,
+      valuePayload.vehicleTrim,
     ]
       .filter(Boolean)
       .join(" ");
@@ -91,7 +96,7 @@ export async function POST(
             Trade Certificate
           </div>
 
-          <h2 style="margin:8px 0;">${formatMoney(offer)}</h2>
+          <h2 style="margin:8px 0;">${formatMoney(offerAmount)}</h2>
 
           <p style="color:#334155;">
             ${escapeHtml(vehicleLabel || "Vehicle")}
@@ -117,9 +122,11 @@ export async function POST(
       const resend = new Resend(process.env.RESEND_API_KEY);
 
       await resend.emails.send({
-        from: "SolaceTrade <offers@yourdomain.com>",
+        from:
+          process.env.RESEND_FROM_EMAIL ||
+          "SolaceTrade <onboarding@resend.dev>",
         to: [email, dealer.lead_email],
-        subject: `Your Trade Certificate – ${formatMoney(offer)}`,
+        subject: `Your Trade Certificate – ${formatMoney(offerAmount)}`,
         html,
       });
 
@@ -131,22 +138,27 @@ export async function POST(
       .from("trade_intakes")
       .update({
         status: "submitted",
-        customer_name: customerName,
+        customer_intent: customerIntent || intake.customer_intent || null,
         customer_contact: email,
-        customer_intent: intent,
-        certificate_id: certificateId,
+        customer_name: customerName,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", intakeId);
+      .eq("id", intake.id);
 
     await logTradeEvent({
       dealerId: dealer.id,
-      intakeId,
+      intakeId: intake.id,
       eventType: "certificate_sent",
-      payload: { email, certificateId },
+      payload: {
+        certificateId,
+        emailedTo: email,
+      },
     });
 
     return NextResponse.json({
       ok: true,
+      intakeId: intake.id,
       emailed,
       certificateId,
     });
