@@ -44,6 +44,78 @@ function formatMileage(value: unknown) {
   }).format(number);
 }
 
+function getStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
+function getExecutionAdmissibility(valuePayload: Record<string, unknown>, input: {
+  offerAmount: number | null;
+  vin: string;
+  mileage: unknown;
+  confidence: unknown;
+  admissibility: unknown;
+  isInternal: boolean;
+}) {
+  const provided = valuePayload.executionAdmissibility;
+
+  if (provided && typeof provided === "object") {
+    const gate = provided as {
+      allowed?: unknown;
+      customerCertificatePermitted?: unknown;
+      managerReviewPermitted?: unknown;
+      reasons?: unknown;
+    };
+
+    return {
+      allowed: gate.allowed === true,
+      customerCertificatePermitted: gate.customerCertificatePermitted === true,
+      managerReviewPermitted: gate.managerReviewPermitted !== false,
+      reasons: getStringArray(gate.reasons),
+    };
+  }
+
+  const reasons: string[] = [];
+
+  if (!input.vin || input.vin === "Not detected" || input.vin.length !== 17) {
+    reasons.push("VIN was not detected with sufficient confidence.");
+  }
+
+  if (!String(input.mileage || "").replace(/[^0-9]/g, "")) {
+    reasons.push("Mileage was not detected with sufficient confidence.");
+  }
+
+  if (!input.offerAmount || !Number.isFinite(input.offerAmount)) {
+    reasons.push("Offer amount was not produced from sufficient state.");
+  }
+
+  if (input.confidence === "Low") {
+    reasons.push("Solace confidence is low.");
+  }
+
+  if (input.admissibility !== "PASS") {
+    reasons.push("Solace did not mark the valuation state as PASS.");
+  }
+
+  if (valuePayload.inspectionRequired === true) {
+    reasons.push("Dealer inspection is required before a certificate can be executed.");
+  }
+
+  for (const item of getStringArray(valuePayload.missingItems)) {
+    if (item && !reasons.includes(item)) reasons.push(item);
+  }
+
+  const allowed = reasons.length === 0;
+
+  return {
+    allowed,
+    customerCertificatePermitted: allowed && !input.isInternal,
+    managerReviewPermitted: true,
+    reasons,
+  };
+}
+
 function cleanVehicleLookupPart(value: unknown) {
   const text = String(value || "")
     .replace(/[^a-zA-Z0-9\s-]/g, " ")
@@ -228,26 +300,6 @@ export async function POST(
       );
     }
 
-    const updatePayload = {
-      status: "submitted",
-      customer_intent: customerIntent || intake.customer_intent || null,
-      customer_contact: customerContact,
-      customer_name: customerName,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: updateError } = await supabaseAdmin
-      .schema(SOLACETRADE_SCHEMA)
-      .from("trade_intakes")
-      .update(updatePayload)
-      .eq("id", intake.id)
-      .eq("dealer_id", dealer.id);
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
     const valuePayload =
       intake.value_payload && typeof intake.value_payload === "object"
         ? intake.value_payload
@@ -296,6 +348,40 @@ export async function POST(
     const vin =
       intake.vin || valuePayload.detectedVin || valuePayload.vin || "Not detected";
     const intentLabel = customerIntent || intake.customer_intent || "Not selected";
+    const isInternal = intake.mode === "internal";
+    const executionAdmissibility = getExecutionAdmissibility(valuePayload, {
+      offerAmount,
+      vin,
+      mileage,
+      confidence,
+      admissibility,
+      isInternal,
+    });
+
+    if (!isInternal && !executionAdmissibility.customerCertificatePermitted) {
+      await logTradeEvent({
+        dealerId: dealer.id,
+        intakeId: intake.id,
+        eventType: "certificate_blocked",
+        payload: {
+          reasons: executionAdmissibility.reasons,
+          confidence,
+          admissibility,
+          vin,
+          mileage,
+        },
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            "Trade certificate cannot be sent yet because the valuation state is incomplete. Dealer review is required.",
+          blocked: true,
+          reasons: executionAdmissibility.reasons,
+        },
+        { status: 409 }
+      );
+    }
 
     const recallResult = await fetchNhtsaRecalls({
       year: vehicleYear,
@@ -313,6 +399,26 @@ export async function POST(
       error: recallResult.error,
     });
     const recallItemsHtml = renderRecallItems(recallResult.recalls);
+
+    const updatePayload = {
+      status: "submitted",
+      customer_intent: customerIntent || intake.customer_intent || null,
+      customer_contact: customerContact,
+      customer_name: customerName,
+      submitted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: updateError } = await supabaseAdmin
+      .schema(SOLACETRADE_SCHEMA)
+      .from("trade_intakes")
+      .update(updatePayload)
+      .eq("id", intake.id)
+      .eq("dealer_id", dealer.id);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
 
     const from =
       process.env.RESEND_FROM_EMAIL || "SolaceTrade <onboarding@resend.dev>";
@@ -367,7 +473,7 @@ export async function POST(
               </div>
 
               <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">
-                Confidence: ${escapeHtml(confidence)} · State: ${escapeHtml(admissibility)} · Intent: ${escapeHtml(intentLabel)}
+                Confidence: ${escapeHtml(confidence)} · State: ${escapeHtml(admissibility)} · Intent: ${escapeHtml(intentLabel)} · Execution: ${executionAdmissibility.allowed ? "Permitted" : "Review required"}
               </div>
             </div>
           </div>
@@ -422,6 +528,12 @@ export async function POST(
                 <h3 style="margin:0 0 8px;font-size:15px;">Recall check</h3>
                 <p style="margin:0;color:#1e3a8a;font-size:13px;">${escapeHtml(dealerRecallSummary)}</p>
                 ${recallItemsHtml ? `<ul style="margin:10px 0 0;padding-left:18px;color:#334155;font-size:12px;">${recallItemsHtml}</ul>` : ""}
+              </div>
+
+              <div style="margin-top:18px;padding:14px;border-radius:16px;background:${executionAdmissibility.allowed ? "#f0fdf4" : "#fff7ed"};border:1px solid ${executionAdmissibility.allowed ? "#bbf7d0" : "#fed7aa"};color:${executionAdmissibility.allowed ? "#166534" : "#9a3412"};">
+                <h3 style="margin:0 0 8px;font-size:15px;">Execution gate</h3>
+                <p style="margin:0;font-size:13px;">${executionAdmissibility.allowed ? "Certificate execution permitted." : "Customer certificate execution blocked until dealer review resolves missing state."}</p>
+                ${executionAdmissibility.reasons.length ? `<ul style="margin:10px 0 0;padding-left:18px;font-size:12px;">${executionAdmissibility.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>` : ""}
               </div>
 
               <div style="margin-top:18px;">
@@ -500,6 +612,7 @@ export async function POST(
           count: recallCount,
           error: recallResult.error,
         },
+        executionAdmissibility,
         resendEnabled: Boolean(process.env.RESEND_API_KEY),
       },
     });
@@ -515,6 +628,7 @@ export async function POST(
         checked: recallResult.checked,
         count: recallCount,
       },
+      executionAdmissibility,
       dealer: {
         name: dealer.name,
         leadEmail: dealer.lead_email,
