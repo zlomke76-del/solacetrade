@@ -1,6 +1,6 @@
 "use client";
 
-import TradeDesk from "@/components/TradeDesk";
+import TradeDesk from "../components/TradeDesk";
 
 export default function Page() {
   return (
