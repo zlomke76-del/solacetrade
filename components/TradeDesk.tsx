@@ -171,6 +171,7 @@ export default function TradeDesk({
   const scanComplete = capturedCount === captureSteps.length;
   const showDetails = scanComplete;
   const canRequestOffer = scanComplete;
+  const canSubmitVehicleFile = isInternal || (customerName.trim().length > 0 && contact.trim().length > 0);
 
   const missingItems = useMemo(() => {
     const missing: string[] = [];
@@ -906,6 +907,9 @@ export default function TradeDesk({
                 >
                   Where should we send your offer?
                 </strong>
+                <p style={{ margin: "-3px 0 9px", color: muted, fontSize: 12, lineHeight: 1.4 }}>
+                  Enter your name and either a phone number or email.
+                </p>
                 <div
                   style={{
                     display: "grid",
@@ -991,7 +995,7 @@ export default function TradeDesk({
 
             <button
               type="button"
-              disabled={submitting}
+              disabled={submitting || !canSubmitVehicleFile}
               onClick={submitVehicleFile}
               style={{
                 width: "100%",
@@ -1003,15 +1007,15 @@ export default function TradeDesk({
                 color: "white",
                 fontSize: 15,
                 fontWeight: 900,
-                cursor: submitting ? "wait" : "pointer",
-                opacity: submitting ? 0.72 : 1,
+                cursor: submitting ? "wait" : !canSubmitVehicleFile ? "not-allowed" : "pointer",
+                opacity: submitting ? 0.72 : !canSubmitVehicleFile ? 0.62 : 1,
               }}
             >
               {isInternal
                 ? "Route to Used Car Manager"
                 : customerIntent
                   ? "Send My Vehicle File"
-                  : `Send to ${dealerName}`}
+                  : "Enter name and contact"}
             </button>
             <button
               type="button"
