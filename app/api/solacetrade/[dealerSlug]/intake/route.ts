@@ -91,17 +91,21 @@ export async function POST(
     const salesperson = cleanText(formData.get("salesperson"), 160);
     const managerNotes = cleanText(formData.get("managerNotes"), 2500);
 
-    const photoEntries = requiredPhotoSteps
-      .map((stepKey) => findPhotoFile(formData, stepKey))
-      .filter(
-        (
-          entry,
-        ): entry is {
-          stepKey: RequiredPhotoStep;
-          submittedKey: string;
-          file: UploadFile;
-        } => Boolean(entry),
-      );
+    const photoEntries = requiredPhotoSteps.reduce<
+      Array<{
+        stepKey: RequiredPhotoStep;
+        submittedKey: string;
+        file: UploadFile;
+      }>
+    >((entries, stepKey) => {
+      const found = findPhotoFile(formData, stepKey);
+
+      if (found) {
+        entries.push(found);
+      }
+
+      return entries;
+    }, []);
 
     const receivedKeys = Array.from(formData.keys());
     const receivedPhotoSteps = photoEntries.map((entry) => entry.stepKey);
