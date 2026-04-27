@@ -4,121 +4,343 @@ import {
   cleanMileage,
   cleanText,
   cleanVin,
+  createSignedPhotoUrls,
+  formatMoney,
   getDealerBySlug,
   logTradeEvent,
+  parseSolaceValue,
   SOLACETRADE_SCHEMA,
-  TRADE_SCAN_BUCKET,
 } from "@/lib/solacetrade";
 
-const photoSteps = ["front", "driverSide", "rear", "odometer", "vin"];
+type TradePhoto = {
+  step_key: string;
+  storage_path: string;
+};
 
-function extensionFor(file: File) {
-  const fallback = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-  const source = file.name || "";
-  const match = source.match(/\.([a-zA-Z0-9]+)$/);
-  return (match?.[1] || fallback).toLowerCase().replace(/[^a-z0-9]/g, "") || fallback;
+type TradeIntake = {
+  id: string;
+  dealer_id: string;
+  customer_name: string | null;
+  customer_contact: string | null;
+  vin: string | null;
+  mileage: number | null;
+  mode: string | null;
+  manager_notes: string | null;
+  photo_paths: string[] | null;
+};
+
+const gatewayUrl = "https://ai-gateway.vercel.sh/v1/chat/completions";
+
+function getGatewayKey() {
+  return process.env.VERCEL_AI_GATEWAY_API_KEY || "";
 }
 
-export async function POST(request: NextRequest, context: { params: { dealerSlug: string } }) {
+function getModel() {
+  return process.env.SOLACETRADE_VALUE_MODEL || "openai/gpt-4o-mini";
+}
+
+function extractMessageText(payload: unknown) {
+  const data = payload as {
+    choices?: Array<{
+      message?: {
+        content?: string | Array<{ type?: string; text?: string }>;
+      };
+    }>;
+  };
+
+  const content = data.choices?.[0]?.message?.content;
+
+  if (typeof content === "string") return content;
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part.type === "text" ? part.text || "" : ""))
+      .join("")
+      .trim();
+  }
+
+  return "";
+}
+
+function safeJsonText(text: string) {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
+
+  const match = trimmed.match(/\{[\s\S]*\}/);
+  return match?.[0] || trimmed;
+}
+
+function findSignedUrl(
+  signedPhotos: Array<{ path: string; signedUrl: string | null }>,
+  stepKey: string
+) {
+  return (
+    signedPhotos.find((photo) => photo.path.includes(`/${stepKey}.`))
+      ?.signedUrl || null
+  );
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: { dealerSlug: string } }
+) {
   try {
-    const { dealerSlug } = context.params;
-    const dealer = await getDealerBySlug(dealerSlug);
-    const formData = await request.formData();
+    const apiKey = getGatewayKey();
 
-    const mode = cleanText(formData.get("mode"), 20) === "internal" ? "internal" : "customer";
-    const vin = cleanVin(formData.get("vin"));
-    const mileage = cleanMileage(formData.get("mileage"));
-    const customerName = cleanText(formData.get("customerName"), 160);
-    const customerContact = cleanText(formData.get("contact"), 180);
-    const salesperson = cleanText(formData.get("salesperson"), 160);
-    const managerNotes = cleanText(formData.get("managerNotes"), 2500);
-
-    const photoEntries = photoSteps
-      .map((stepKey) => ({ stepKey, file: formData.get(stepKey) }))
-      .filter((entry): entry is { stepKey: string; file: File } => entry.file instanceof File && entry.file.size > 0);
-
-    if (photoEntries.length !== photoSteps.length) {
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "All five guided vehicle photos are required before intake can be created." },
-        { status: 400 }
+        { error: "VERCEL_AI_GATEWAY_API_KEY is not configured." },
+        { status: 500 }
       );
     }
 
-    if (!vin || vin.length < 11) {
-      return NextResponse.json({ error: "A valid VIN is required." }, { status: 400 });
-    }
+    const { dealerSlug } = context.params;
+    const dealer = await getDealerBySlug(dealerSlug);
+    const body = await request.json().catch(() => ({}));
+    const intakeId = cleanText(body.intakeId, 80);
 
-    if (!mileage) {
-      return NextResponse.json({ error: "Mileage is required." }, { status: 400 });
+    if (!intakeId) {
+      return NextResponse.json(
+        { error: "intakeId is required." },
+        { status: 400 }
+      );
     }
 
     const { data: intake, error: intakeError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
-      .insert({
-        dealer_id: dealer.id,
-        status: "scanned",
-        mode,
-        customer_name: customerName || null,
-        customer_contact: customerContact || null,
-        salesperson: salesperson || null,
-        vin,
-        mileage,
-        manager_notes: managerNotes || null,
-        photo_count: photoEntries.length,
-      })
-      .select("id")
-      .single();
+      .select(
+        "id, dealer_id, customer_name, customer_contact, vin, mileage, mode, manager_notes, photo_paths"
+      )
+      .eq("id", intakeId)
+      .eq("dealer_id", dealer.id)
+      .single<TradeIntake>();
 
     if (intakeError || !intake) {
-      throw new Error(intakeError?.message || "Failed to create trade intake.");
+      return NextResponse.json(
+        { error: intakeError?.message || "Trade intake not found." },
+        { status: 404 }
+      );
     }
 
-    const uploadedPaths: string[] = [];
-    const photoRows = [];
-
-    for (const { stepKey, file } of photoEntries) {
-      const ext = extensionFor(file);
-      const storagePath = `${dealer.slug}/${intake.id}/${stepKey}.${ext}`;
-      const bytes = Buffer.from(await file.arrayBuffer());
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from(TRADE_SCAN_BUCKET)
-        .upload(storagePath, bytes, {
-          contentType: file.type || "image/jpeg",
-          upsert: true,
-        });
-
-      if (uploadError) {
-        throw new Error(`Photo upload failed for ${stepKey}: ${uploadError.message}`);
-      }
-
-      uploadedPaths.push(storagePath);
-      photoRows.push({
-        dealer_id: dealer.id,
-        intake_id: intake.id,
-        step_key: stepKey,
-        storage_bucket: TRADE_SCAN_BUCKET,
-        storage_path: storagePath,
-        original_filename: file.name || null,
-        content_type: file.type || null,
-        size_bytes: file.size,
-      });
-    }
-
-    const { error: photoError } = await supabaseAdmin
+    const { data: photoRows, error: photoError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_photos")
-      .insert(photoRows);
+      .select("step_key, storage_path")
+      .eq("intake_id", intake.id)
+      .eq("dealer_id", dealer.id)
+      .order("created_at", { ascending: true });
 
     if (photoError) {
       throw new Error(photoError.message);
     }
 
+    const photos = (photoRows || []) as TradePhoto[];
+
+    if (photos.length < 5) {
+      return NextResponse.json(
+        {
+          error:
+            "All five guided vehicle photos are required before Solace can produce an offer.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const signedPhotos = await createSignedPhotoUrls(
+      photos.map((photo) => photo.storage_path)
+    );
+
+    const frontUrl = findSignedUrl(signedPhotos, "front");
+    const driverSideUrl = findSignedUrl(signedPhotos, "driverSide");
+    const rearUrl = findSignedUrl(signedPhotos, "rear");
+    const odometerUrl = findSignedUrl(signedPhotos, "odometer");
+    const vinUrl = findSignedUrl(signedPhotos, "vin");
+
+    const photoManifest = photos.map((photo) => ({
+      stepKey: photo.step_key,
+      hasSignedUrl: Boolean(
+        signedPhotos.find((signed) => signed.path === photo.storage_path)
+          ?.signedUrl
+      ),
+    }));
+
+    const prompt = `
+You are SolaceTrade, a dealer trade-intake assistant.
+
+Your task:
+1. Read the VIN from the VIN image if visible.
+2. Read the mileage from the odometer image if visible.
+3. Review the exterior photos for visible condition signals.
+4. Produce a conservative instant cash offer payload for dealer review.
+
+Return ONLY valid JSON with this exact shape:
+{
+  "offerAmount": number | null,
+  "offerRangeLow": number | null,
+  "offerRangeHigh": number | null,
+  "title": string,
+  "confidence": "Low" | "Medium" | "High",
+  "admissibility": "PASS" | "PARTIAL" | "DENY",
+  "summaryLines": string[],
+  "conditionNotes": string[],
+  "missingItems": string[],
+  "dealerReviewNotes": string[],
+  "detectedVin": string | null,
+  "detectedMileage": number | null,
+  "vehicle": {
+    "vin": string | null,
+    "mileage": number | null
+  }
+}
+
+Rules:
+- If VIN is not visible, detectedVin must be null.
+- If mileage is not visible, detectedMileage must be null.
+- Do not invent VIN or mileage.
+- If VIN or mileage cannot be read, admissibility should be PARTIAL.
+- Keep summaryLines customer-friendly.
+- Keep dealerReviewNotes operational and concise.
+- The offer may be conservative and preliminary, but should be framed as an instant cash offer pending dealer verification.
+- Do not include markdown.
+- Do not include text outside JSON.
+
+Dealer:
+${dealer.name}
+${dealer.city || ""}, ${dealer.state || ""}
+
+Existing intake data:
+Customer name: ${intake.customer_name || "not provided"}
+Customer contact: ${intake.customer_contact || "not provided"}
+Manual VIN: ${intake.vin || "not provided"}
+Manual mileage: ${intake.mileage || "not provided"}
+Mode: ${intake.mode || "customer"}
+Photo manifest: ${JSON.stringify(photoManifest)}
+`.trim();
+
+    const content: Array<Record<string, unknown>> = [
+      { type: "text", text: prompt },
+    ];
+
+    if (frontUrl) {
+      content.push({
+        type: "image_url",
+        image_url: { url: frontUrl },
+      });
+    }
+
+    if (driverSideUrl) {
+      content.push({
+        type: "image_url",
+        image_url: { url: driverSideUrl },
+      });
+    }
+
+    if (rearUrl) {
+      content.push({
+        type: "image_url",
+        image_url: { url: rearUrl },
+      });
+    }
+
+    if (odometerUrl) {
+      content.push({
+        type: "image_url",
+        image_url: { url: odometerUrl },
+      });
+    }
+
+    if (vinUrl) {
+      content.push({
+        type: "image_url",
+        image_url: { url: vinUrl },
+      });
+    }
+
+    const response = await fetch(gatewayUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        messages: [
+          {
+            role: "user",
+            content,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 900,
+      }),
+    });
+
+    const gatewayJson = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error("SolaceTrade AI Gateway error", {
+        status: response.status,
+        payload: gatewayJson,
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            (gatewayJson as { error?: { message?: string } })?.error
+              ?.message || "AI Gateway value request failed.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const rawText = extractMessageText(gatewayJson);
+    const parsed = parseSolaceValue(safeJsonText(rawText));
+
+    const detectedVin = cleanVin(
+      parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
+    );
+
+    const detectedMileage =
+      cleanMileage(
+        parsed.detectedMileage ||
+          parsed.mileage ||
+          parsed.vehicle?.mileage ||
+          intake.mileage
+      ) || null;
+
+    const valuePayload = {
+      ...parsed,
+      detectedVin: detectedVin || null,
+      detectedMileage,
+      vin: detectedVin || null,
+      mileage: detectedMileage,
+      vehicle: {
+        vin: detectedVin || null,
+        mileage: detectedMileage,
+      },
+      title:
+        parsed.title ||
+        `Instant cash offer: ${formatMoney(parsed.offerAmount)}`,
+    };
+
+    const updatePayload = {
+      status: "valued",
+      vin: detectedVin || intake.vin || null,
+      mileage: detectedMileage || intake.mileage || null,
+      llm_summary: valuePayload.summaryLines?.join("\n") || null,
+      offer_amount: valuePayload.offerAmount,
+      offer_range_low: valuePayload.offerRangeLow,
+      offer_range_high: valuePayload.offerRangeHigh,
+      value_payload: valuePayload,
+      updated_at: new Date().toISOString(),
+    };
+
     const { error: updateError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
-      .update({ photo_paths: uploadedPaths, photo_count: uploadedPaths.length })
+      .update(updatePayload)
       .eq("id", intake.id)
       .eq("dealer_id", dealer.id);
 
@@ -129,8 +351,15 @@ export async function POST(request: NextRequest, context: { params: { dealerSlug
     await logTradeEvent({
       dealerId: dealer.id,
       intakeId: intake.id,
-      eventType: "intake_created",
-      payload: { photoCount: uploadedPaths.length, mode },
+      eventType: "value_created",
+      payload: {
+        model: getModel(),
+        hasDetectedVin: Boolean(detectedVin),
+        hasDetectedMileage: Boolean(detectedMileage),
+        offerAmount: valuePayload.offerAmount,
+        confidence: valuePayload.confidence,
+        admissibility: valuePayload.admissibility,
+      },
     });
 
     return NextResponse.json({
@@ -140,10 +369,12 @@ export async function POST(request: NextRequest, context: { params: { dealerSlug
         slug: dealer.slug,
         name: dealer.name,
       },
-      photoPaths: uploadedPaths,
+      value: valuePayload,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown intake error.";
+    const message =
+      error instanceof Error ? error.message : "Unknown value error.";
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
