@@ -22,6 +22,38 @@ type CaptureStep = {
 
 type PhotoMap = Record<CaptureStep["key"], File | null>;
 
+type MarketCompBand = {
+  low: number | null;
+  high: number | null;
+};
+
+type MarketCompSource = {
+  source: "MMR" | "KBB" | "Market API" | "Auction Proxy";
+  status: "live" | "estimated" | "not_configured" | "failed";
+  trade: MarketCompBand;
+  retail: MarketCompBand;
+  privateParty: MarketCompBand;
+  auction: MarketCompBand;
+  note: string;
+};
+
+type MarketCompSnapshot = {
+  generatedAt: string;
+  vin: string | null;
+  mileage: number | null;
+  vehicleLabel: string | null;
+  sources: MarketCompSource[];
+  acquisitionTarget: number | null;
+  tradeLow: number | null;
+  tradeHigh: number | null;
+  retailLow: number | null;
+  retailHigh: number | null;
+  privateLow: number | null;
+  privateHigh: number | null;
+  confidence: "Low" | "Medium" | "High";
+  basis: string;
+};
+
 type SolaceValue = {
   offerAmount: number | null;
   offerRangeLow: number | null;
@@ -53,6 +85,7 @@ type SolaceValue = {
     model?: string | null;
     trim?: string | null;
   } | null;
+  marketComps?: MarketCompSnapshot | null;
 };
 
 type IntakeErrorBody = {
@@ -115,6 +148,19 @@ function formatMoney(value: number | null | undefined) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatMoneyRange(low: number | null | undefined, high: number | null | undefined) {
+  if (low && high) return `${formatMoney(low)} - ${formatMoney(high)}`;
+  if (low || high) return formatMoney(low || high);
+  return "Pending";
+}
+
+function sourceStatusLabel(status: MarketCompSource["status"]) {
+  if (status === "live") return "Live";
+  if (status === "estimated") return "Proxy";
+  if (status === "failed") return "Failed";
+  return "Off";
 }
 
 function cleanMileage(value: string) {
@@ -185,7 +231,7 @@ function getValueVehicleLabel(value: SolaceValue | null) {
   return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
     .filter(Boolean)
     .join(" ")
-    .replace(/s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -1021,6 +1067,135 @@ export default function TradeDesk({
                   {detectedVehicle.model || "Pending"}
                   {detectedVehicle.trim ? ` · Trim: ${detectedVehicle.trim}` : ""}
                 </div>
+              </div>
+            )}
+
+            {value.marketComps && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 16,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    marginBottom: 10,
+                  }}
+                >
+                  <div>
+                    <strong style={{ display: "block", fontSize: 14 }}>
+                      Live market comp logic
+                    </strong>
+                    <span style={{ color: muted, fontSize: 12 }}>
+                      MMR / KBB / market API when configured, with auction proxy guardrail.
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      padding: "5px 8px",
+                      borderRadius: 999,
+                      background: value.marketComps.confidence === "High" ? "#ecfdf5" : "#fff7ed",
+                      color: value.marketComps.confidence === "High" ? "#047857" : "#9a3412",
+                      fontSize: 11,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {value.marketComps.confidence} confidence
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      padding: 10,
+                      borderRadius: 13,
+                      background: "white",
+                      fontSize: 12,
+                    }}
+                  >
+                    <strong>Trade / acquisition</strong>
+                    <br />
+                    {formatMoneyRange(value.marketComps.tradeLow, value.marketComps.tradeHigh)}
+                  </span>
+                  <span
+                    style={{
+                      padding: 10,
+                      borderRadius: 13,
+                      background: "white",
+                      fontSize: 12,
+                    }}
+                  >
+                    <strong>Retail market</strong>
+                    <br />
+                    {formatMoneyRange(value.marketComps.retailLow, value.marketComps.retailHigh)}
+                  </span>
+                  <span
+                    style={{
+                      padding: 10,
+                      borderRadius: 13,
+                      background: "white",
+                      fontSize: 12,
+                    }}
+                  >
+                    <strong>Private party</strong>
+                    <br />
+                    {formatMoneyRange(value.marketComps.privateLow, value.marketComps.privateHigh)}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                    gap: 6,
+                    marginTop: 9,
+                  }}
+                >
+                  {value.marketComps.sources.map((source) => (
+                    <span
+                      key={source.source}
+                      title={source.note}
+                      style={{
+                        padding: "7px 6px",
+                        borderRadius: 12,
+                        background:
+                          source.status === "live"
+                            ? "#ecfdf5"
+                            : source.status === "estimated"
+                              ? "#eff6ff"
+                              : "#f1f5f9",
+                        color:
+                          source.status === "live"
+                            ? "#047857"
+                            : source.status === "estimated"
+                              ? "#1d4ed8"
+                              : muted,
+                        fontSize: 11,
+                        fontWeight: 900,
+                        textAlign: "center",
+                      }}
+                    >
+                      {source.source}: {sourceStatusLabel(source.status)}
+                    </span>
+                  ))}
+                </div>
+
+                <p style={{ margin: "9px 0 0", color: muted, fontSize: 12, lineHeight: 1.4 }}>
+                  {value.marketComps.basis}
+                </p>
               </div>
             )}
 
