@@ -52,6 +52,16 @@ type StructuredTrim = {
   source: "vin_decode" | "vision" | "inferred" | "unknown";
 };
 
+type VisualConditionConfidence = "Low" | "Medium" | "High";
+
+type DamageFlag = {
+  panel: string | null;
+  type: string | null;
+  severity: "minor" | "moderate" | "major" | "unknown";
+  confidence: VisualConditionConfidence;
+  note: string | null;
+};
+
 type ExtendedSolaceValuePayload = {
   offerAmount: number | null;
   offerRangeLow: number | null;
@@ -61,6 +71,10 @@ type ExtendedSolaceValuePayload = {
   admissibility?: "PASS" | "PARTIAL" | "DENY";
   summaryLines?: string[];
   conditionNotes?: string[];
+  conditionScore?: number | null;
+  visualConditionConfidence?: VisualConditionConfidence;
+  damageFlags?: DamageFlag[];
+  inspectionRequired?: boolean;
   missingItems?: string[];
   dealerReviewNotes?: string[];
   detectedVin?: string | null;
@@ -273,6 +287,100 @@ function buildStructuredTrim(
   };
 }
 
+
+
+function cleanConditionScore(value: unknown) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) return null;
+
+  return Math.min(5, Math.max(1, Math.round(number)));
+}
+
+function normalizeConditionConfidence(value: unknown): VisualConditionConfidence {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "high") return "High";
+  if (text === "low") return "Low";
+
+  return "Medium";
+}
+
+function normalizeDamageSeverity(value: unknown): DamageFlag["severity"] {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "minor") return "minor";
+  if (text === "moderate") return "moderate";
+  if (text === "major") return "major";
+
+  return "unknown";
+}
+
+function normalizeDamageFlags(value: unknown): DamageFlag[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const flag = item as Record<string, unknown>;
+      const panel = cleanVehicleText(flag.panel);
+      const type = cleanVehicleText(flag.type);
+      const note = cleanVehicleText(flag.note);
+      const severity = normalizeDamageSeverity(flag.severity);
+      const confidence = normalizeConditionConfidence(flag.confidence);
+
+      if (!panel && !type && !note) return null;
+
+      return { panel, type, severity, confidence, note };
+    })
+    .filter((flag): flag is DamageFlag => Boolean(flag));
+}
+
+function requiresInspection({
+  conditionScore,
+  visualConditionConfidence,
+  damageFlags,
+}: {
+  conditionScore: number | null;
+  visualConditionConfidence: VisualConditionConfidence;
+  damageFlags: DamageFlag[];
+}) {
+  const hasModerateOrMajorDamage = damageFlags.some(
+    (flag) => flag.severity === "moderate" || flag.severity === "major"
+  );
+
+  return (
+    visualConditionConfidence === "Low" ||
+    (conditionScore !== null && conditionScore <= 2) ||
+    hasModerateOrMajorDamage
+  );
+}
+
+function buildDamageConditionNotes(
+  existingNotes: string[] | undefined,
+  damageFlags: DamageFlag[]
+) {
+  const notes = Array.isArray(existingNotes) ? [...existingNotes] : [];
+
+  for (const flag of damageFlags) {
+    const parts = [
+      flag.severity !== "unknown" ? flag.severity : null,
+      flag.type,
+      flag.panel,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const note = flag.note ? `${parts ? `${parts}: ` : ""}${flag.note}` : parts;
+
+    if (note && !notes.some((item) => item.toLowerCase() === note.toLowerCase())) {
+      notes.push(note);
+    }
+  }
+
+  return notes;
+}
+
 async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null> {
   const clean = cleanVin(vin);
 
@@ -441,9 +549,10 @@ You are SolaceTrade, a dealer trade-intake assistant.
 Your task:
 1. Read the VIN from the VIN image if visible.
 2. Read the mileage from the odometer image if visible.
-3. Review the exterior photos for visible condition signals.
+3. Review the exterior photos for visible damage and condition signals.
 4. Identify visible value-relevant option signals only.
-5. Produce a conservative instant cash offer payload for dealer review.
+5. Produce a structured visual condition assessment for dealer review.
+6. Produce a conservative instant cash offer payload for dealer review.
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -455,6 +564,18 @@ Return ONLY valid JSON with this exact shape:
   "admissibility": "PASS" | "PARTIAL" | "DENY",
   "summaryLines": string[],
   "conditionNotes": string[],
+  "conditionScore": number | null,
+  "visualConditionConfidence": "Low" | "Medium" | "High",
+  "damageFlags": [
+    {
+      "panel": string | null,
+      "type": string | null,
+      "severity": "minor" | "moderate" | "major" | "unknown",
+      "confidence": "Low" | "Medium" | "High",
+      "note": string | null
+    }
+  ],
+  "inspectionRequired": boolean,
   "missingItems": string[],
   "dealerReviewNotes": string[],
   "detectedVin": string | null,
@@ -494,6 +615,12 @@ Rules:
 - If VIN is not visible, detectedVin must be null.
 - If mileage is not visible, detectedMileage must be null.
 - If year, make, model, trim, body class, drivetrain, engine, fuel type, doors, transmission, series, or options are not visible from the image evidence, set them to null or [] as appropriate. The server will decode stable fields from the detected VIN when possible.
+- conditionScore must be 1-5 where 5 means clean/excellent visible condition and 1 means major visible damage or severe uncertainty.
+- visualConditionConfidence must reflect photo quality, angle coverage, lighting, and whether damage can be inspected clearly.
+- damageFlags must identify only visible damage or visible concern signals. Do not invent damage. Use [] if no damage is visible.
+- For each damageFlag, panel should be specific when possible: front bumper, hood, driver door, passenger door, rear bumper, tailgate/trunk, wheel/tire, glass, light, roof, or unknown.
+- Use severity minor for small scratches/scuffs, moderate for dents/panel damage/visible paint damage, major for broken lights, missing parts, structural-looking damage, severe collision signs, or unsafe visible condition.
+- inspectionRequired should be true if photo quality is low, conditionScore <= 2, moderate/major damage is visible, or the images do not support a confident condition read.
 - Use optionSignals for visible price-impacting equipment clues from photos only, such as badging, wheel style, sunroof, panoramic roof, tow package, 4x4/AWD badge, leather, premium audio, navigation, roof rails, or driver-assist sensors.
 - Do not use optionSignals for generic facts like doors, fuel type, body class, brake type, vehicle class, hydraulic brakes, GVWR, or MPV/SUV classification.
 - Do not invent VIN, mileage, year, make, model, trim, drivetrain, engine, packages, or options.
@@ -571,7 +698,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           },
         ],
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: 1600,
       }),
     });
 
@@ -676,10 +803,42 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       vehicleSeries,
     ]);
 
+    const damageFlags = normalizeDamageFlags(parsed.damageFlags);
+    const conditionScore = cleanConditionScore(parsed.conditionScore);
+    const visualConditionConfidence = normalizeConditionConfidence(
+      parsed.visualConditionConfidence
+    );
+    const inspectionRequired =
+      Boolean(parsed.inspectionRequired) ||
+      requiresInspection({
+        conditionScore,
+        visualConditionConfidence,
+        damageFlags,
+      });
+    const conditionNotes = buildDamageConditionNotes(
+      parsed.conditionNotes,
+      damageFlags
+    );
+    const dealerReviewNotes = Array.isArray(parsed.dealerReviewNotes)
+      ? [...parsed.dealerReviewNotes]
+      : [];
+
+    if (inspectionRequired) {
+      dealerReviewNotes.push(
+        "Visual condition requires dealer inspection before finalizing the offer."
+      );
+    }
+
     const valuePayload = {
       ...parsed,
       detectedVin: detectedVin || null,
       detectedMileage,
+      conditionScore,
+      visualConditionConfidence,
+      damageFlags,
+      inspectionRequired,
+      conditionNotes,
+      dealerReviewNotes,
       vin: detectedVin || null,
       mileage: detectedMileage,
       vehicleYear,
@@ -769,6 +928,12 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           configuration: vehicleConfiguration,
           options: vehicleOptions,
           signals: vehicleSignals,
+        },
+        visualCondition: {
+          conditionScore,
+          visualConditionConfidence,
+          inspectionRequired,
+          damageFlagCount: damageFlags.length,
         },
         offerAmount: valuePayload.offerAmount,
         confidence: valuePayload.confidence,
