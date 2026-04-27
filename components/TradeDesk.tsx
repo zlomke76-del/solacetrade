@@ -89,6 +89,8 @@ const fieldStyle = {
   fontSize: 15,
 };
 
+const previewImage = "/images/vehicle_scan_01.png";
+
 export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   const isInternal = mode === "internal";
   const [started, setStarted] = useState(false);
@@ -108,7 +110,6 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
   const capturedCount = Object.values(photos).filter(Boolean).length;
   const progress = Math.round((capturedCount / captureSteps.length) * 100);
   const mileageNumber = cleanMileage(mileage);
-  const hasCorePhotos = Boolean(photos.front && photos.odometer && photos.vin);
   const scanComplete = capturedCount >= captureSteps.length;
 
   const missingItems = useMemo(() => {
@@ -215,6 +216,144 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
     setResult(null);
   }
 
+  function renderCapturePreview({ startMode = false }: { startMode?: boolean }) {
+    return (
+      <label
+        style={{
+          position: "relative",
+          display: "block",
+          minHeight: startMode ? 310 : 300,
+          borderRadius: 18,
+          overflow: "hidden",
+          cursor: "pointer",
+          background: "#020617",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
+        }}
+      >
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhoto}
+          style={{ display: "none" }}
+        />
+
+        <img
+          src={previewImage}
+          alt="Vehicle scan preview"
+          style={{
+            width: "100%",
+            height: "100%",
+            minHeight: startMode ? 310 : 300,
+            display: "block",
+            objectFit: "cover",
+            filter: "brightness(0.72)",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(180deg, rgba(2,6,23,0.38) 0%, rgba(2,6,23,0.12) 38%, rgba(2,6,23,0.56) 100%)",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            right: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            color: "white",
+          }}
+        >
+          <div
+            style={{
+              padding: "7px 10px",
+              borderRadius: 999,
+              background: "rgba(15,23,42,0.62)",
+              border: "1px solid rgba(255,255,255,0.16)",
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            {startMode ? "Guided vehicle scan" : `Step ${stepIndex + 1} of ${captureSteps.length}`}
+          </div>
+
+          <div
+            style={{
+              padding: "7px 10px",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.88)",
+              color: "#0f172a",
+              fontSize: 12,
+              fontWeight: 900,
+            }}
+          >
+            {capturedCount}/{captureSteps.length} captured
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              width: 76,
+              height: 76,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.92)",
+              color: "#0f172a",
+              display: "grid",
+              placeItems: "center",
+              boxShadow: "0 18px 42px rgba(0,0,0,0.34)",
+              border: "1px solid rgba(255,255,255,0.7)",
+              fontSize: 34,
+              fontWeight: 800,
+              lineHeight: 1,
+            }}
+          >
+            +
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            left: 16,
+            right: 16,
+            bottom: 14,
+            color: "white",
+          }}
+        >
+          <strong style={{ display: "block", fontSize: 15 }}>
+            {startMode ? "Start with a few guided photos" : currentStep.label}
+          </strong>
+          <span style={{ display: "block", marginTop: 4, fontSize: 13, opacity: 0.86 }}>
+            {startMode
+              ? "Front, side, rear, interior, odometer, and VIN."
+              : `Tap to capture the ${currentStep.label.toLowerCase()}.`}
+          </span>
+        </div>
+      </label>
+    );
+  }
+
   return (
     <div
       style={{
@@ -261,46 +400,49 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
         <p style={{ margin: 0, color: "#475569", fontSize: 16, lineHeight: 1.55 }}>
           {isInternal
             ? "Capture the vehicle once, preserve the state, and route a clean packet to the used car manager."
-            : "Stand near your vehicle. Take a few guided photos. TradeDesk by Solace builds the offer file for Brenham CDJR."}
+            : "Capture your vehicle. The rest is handled."}
         </p>
       </div>
 
       {!started ? (
         <div
           style={{
-            padding: 24,
-            border: "1px dashed #cbd5e1",
-            borderRadius: 16,
+            padding: 14,
+            border: "1px solid #e2e8f0",
+            borderRadius: 18,
             background: "#f8fafc",
-            textAlign: "center",
           }}
         >
-          <h3 style={{ marginTop: 0 }}>
-            {isInternal ? "Start sales-floor evaluation" : "Start a 60-second vehicle scan"}
-          </h3>
-          <p style={{ color: "#475569", lineHeight: 1.55 }}>
-            {isInternal
-              ? "Designed for consultants capturing a trade while the customer is at the dealership."
-              : "We’ll guide you through front, side, rear, interior, odometer, and VIN photos."}
-          </p>
+          {renderCapturePreview({ startMode: true })}
 
-          <button
-            type="button"
-            onClick={() => setStarted(true)}
-            style={{
-              width: "100%",
-              padding: 15,
-              background: isInternal ? "#0f172a" : "#b91c1c",
-              color: "white",
-              border: "none",
-              borderRadius: 12,
-              fontSize: 16,
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            {isInternal ? "Start Internal Evaluation" : "Start Vehicle Scan"}
-          </button>
+          <div style={{ padding: "18px 4px 2px", textAlign: "center" }}>
+            <h3 style={{ margin: "0 0 6px", fontSize: 20 }}>
+              {isInternal ? "Start sales-floor evaluation" : "Start vehicle scan"}
+            </h3>
+            <p style={{ margin: "0 auto 14px", maxWidth: 520, color: "#475569", lineHeight: 1.55 }}>
+              {isInternal
+                ? "Designed for consultants capturing a trade while the customer is at the dealership."
+                : "We’ll guide each photo so Brenham CDJR receives a cleaner vehicle file for review."}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setStarted(true)}
+              style={{
+                width: "100%",
+                padding: 15,
+                background: isInternal ? "#0f172a" : "#b91c1c",
+                color: "white",
+                border: "none",
+                borderRadius: 12,
+                fontSize: 16,
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              {isInternal ? "Start Internal Evaluation" : "Start Vehicle Scan"}
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -333,110 +475,31 @@ export default function TradeDesk({ mode = "customer" }: TradeDeskProps) {
           >
             <div
               style={{
-                padding: 20,
+                padding: 14,
                 border: "1px solid #e2e8f0",
-                borderRadius: 16,
+                borderRadius: 18,
                 background: "#fff",
               }}
             >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                Step {stepIndex + 1} of {captureSteps.length}
-                {currentStep.requiredForOffer ? " • Required for offer" : ""}
+              <div style={{ padding: "4px 4px 14px" }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Step {stepIndex + 1} of {captureSteps.length}
+                  {currentStep.requiredForOffer ? " • Required for offer" : ""}
+                </div>
+
+                <h3 style={{ margin: "8px 0 6px", fontSize: 22 }}>{currentStep.label}</h3>
+                <p style={{ margin: 0, color: "#475569" }}>{currentStep.help}</p>
               </div>
 
-              <h3 style={{ margin: "8px 0 6px", fontSize: 22 }}>{currentStep.label}</h3>
-
-              <p style={{ margin: "0 0 16px", color: "#475569" }}>{currentStep.help}</p>
-
-<label
-  style={{
-    position: "relative",
-    display: "block",
-    borderRadius: 16,
-    overflow: "hidden",
-    cursor: "pointer",
-  }}
->
-  <input
-    type="file"
-    accept="image/*"
-    capture="environment"
-    onChange={handlePhoto}
-    style={{ display: "none" }}
-  />
-
-  {/* Background Image */}
-  <img
-    src="/images/vehicle_scan_01.png"
-    style={{
-      width: "100%",
-      height: 320,
-      objectFit: "cover",
-      filter: "brightness(0.75)",
-    }}
-  />
-
-  {/* Overlay */}
-  <div
-    style={{
-      position: "absolute",
-      inset: 0,
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "space-between",
-      padding: 16,
-      color: "white",
-    }}
-  >
-    {/* Step */}
-    <div style={{ fontSize: 12, fontWeight: 900 }}>
-      Step {stepIndex + 1} of {captureSteps.length}
-    </div>
-
-    {/* Center Capture Button */}
-    <div
-      style={{
-        display: "grid",
-        placeItems: "center",
-      }}
-    >
-      <div
-        style={{
-          width: 70,
-          height: 70,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.9)",
-          display: "grid",
-          placeItems: "center",
-          fontSize: 28,
-          fontWeight: 900,
-          color: "#0f172a",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-        }}
-      >
-        +
-      </div>
-    </div>
-
-    {/* Instruction */}
-    <div
-      style={{
-        fontSize: 13,
-        opacity: 0.9,
-      }}
-    >
-      Tap to capture the {currentStep.label.toLowerCase()}
-    </div>
-  </div>
-</label>
+              {renderCapturePreview({ startMode: false })}
             </div>
 
             <div
