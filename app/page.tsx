@@ -53,12 +53,7 @@ export default function Page() {
       </header>
 
       {/* HERO */}
-      <section
-        style={{
-          padding: "34px 18px 16px",
-          textAlign: "center",
-        }}
-      >
+      <section style={{ padding: "34px 18px 16px", textAlign: "center" }}>
         <h1
           style={{
             fontSize: "clamp(34px, 6vw, 62px)",
@@ -89,7 +84,7 @@ export default function Page() {
         </a>
       </section>
 
-      {/* APP EXPERIENCE FIRST */}
+      {/* EXPERIENCE FIRST */}
       <section
         id="vehicle-scan"
         style={{
@@ -101,7 +96,7 @@ export default function Page() {
         <TradeDesk mode="customer" dealerSlug="brenhamcdjr" />
       </section>
 
-      {/* VALUE REINFORCEMENT */}
+      {/* VALUE CARDS */}
       <section style={{ padding: "30px 18px" }}>
         <div
           style={{
@@ -113,18 +108,9 @@ export default function Page() {
           }}
         >
           {[
-            [
-              "Guided capture",
-              "Customers follow a clean, step-by-step photo flow.",
-            ],
-            [
-              "Cleaner values",
-              "VIN and mileage come after verified image capture.",
-            ],
-            [
-              "Dealer-ready",
-              "Every trade becomes a structured acquisition packet.",
-            ],
+            ["Guided capture", "Customers follow a clean, step-by-step photo flow."],
+            ["Cleaner values", "VIN and mileage come after verified image capture."],
+            ["Dealer-ready", "Every trade becomes a structured acquisition packet."],
           ].map(([title, body]) => (
             <div
               key={title}
@@ -133,10 +119,9 @@ export default function Page() {
                 borderRadius: 20,
                 background: "white",
                 border: "1px solid #e2e8f0",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
               }}
             >
-              <strong style={{ fontSize: 16 }}>{title}</strong>
+              <strong>{title}</strong>
               <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
                 {body}
               </p>
@@ -145,43 +130,87 @@ export default function Page() {
         </div>
       </section>
 
-      {/* 🔥 PRICING NOW AT THE BOTTOM */}
+      {/* 🔥 OLD FORMAT — MOVED TO BOTTOM */}
       <section
         style={{
-          padding: "50px 18px",
+          padding: "40px 18px",
           background: "#0f172a",
           color: "white",
         }}
       >
-        <div style={{ maxWidth: 900, margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ fontSize: 30, marginBottom: 10 }}>
-            Ready to start acquiring better trades?
-          </h2>
-
-          <p style={{ color: "#cbd5f5", marginBottom: 30 }}>
-            Turn every trade into a structured acquisition opportunity.
-          </p>
-
+        <div
+          style={{
+            maxWidth: 900,
+            margin: "0 auto",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 20,
+          }}
+        >
+          {/* LEFT CARD */}
           <div
             style={{
-              display: "flex",
-              gap: 16,
-              justifyContent: "center",
-              flexWrap: "wrap",
+              padding: 24,
+              borderRadius: 20,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
             }}
           >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                color: "#22c55e",
+                marginBottom: 8,
+              }}
+            >
+              DEALER SIGNUP
+            </div>
+
+            <h3 style={{ fontSize: 26, marginBottom: 12 }}>
+              Start acquiring better trades.
+            </h3>
+
+            <p style={{ color: "#cbd5f5", fontSize: 14 }}>
+              SolaceTrade turns trade-in intake into a guided acquisition flow:
+              photo capture, VIN context, manager routing, and dealer-ready review.
+            </p>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={pill}>Dealer onboarding</span>
+              <span style={pill}>Manager routing</span>
+              <span style={pill}>Monthly platform access</span>
+            </div>
+          </div>
+
+          {/* RIGHT CARD */}
+          <div
+            style={{
+              padding: 24,
+              borderRadius: 20,
+              background: "white",
+              color: "#0f172a",
+            }}
+          >
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>
+              Dealer Access
+            </div>
+
+            <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
+              Complete setup and subscription to begin onboarding.
+            </p>
+
             <a
               href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200"
               target="_blank"
-              style={{
-                padding: "18px 24px",
-                borderRadius: 14,
-                background: "#22c55e",
-                color: "black",
-                fontWeight: 900,
-                textDecoration: "none",
-                fontSize: 16,
-              }}
+              style={primaryBtn}
             >
               Start Subscription — $595/mo
             </a>
@@ -189,23 +218,21 @@ export default function Page() {
             <a
               href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
               target="_blank"
-              style={{
-                padding: "18px 24px",
-                borderRadius: 14,
-                background: "#e2e8f0",
-                color: "#0f172a",
-                fontWeight: 900,
-                textDecoration: "none",
-                fontSize: 16,
-              }}
+              style={secondaryBtn}
             >
               Pay Setup Fee — $299
             </a>
-          </div>
 
-          <p style={{ marginTop: 16, fontSize: 13, color: "#94a3b8" }}>
-            One-time setup fee + active monthly subscription required
-          </p>
+            <p
+              style={{
+                fontSize: 12,
+                color: "#94a3b8",
+                marginTop: 10,
+              }}
+            >
+              One-time setup fee + active subscription required
+            </p>
+          </div>
         </div>
       </section>
 
@@ -225,3 +252,36 @@ export default function Page() {
     </main>
   );
 }
+
+/* styles */
+const pill = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  background: "rgba(255,255,255,0.08)",
+};
+
+const primaryBtn = {
+  display: "block",
+  width: "100%",
+  padding: "14px",
+  borderRadius: 12,
+  background: "#22c55e",
+  color: "black",
+  fontWeight: 900,
+  textAlign: "center" as const,
+  textDecoration: "none",
+  marginBottom: 10,
+};
+
+const secondaryBtn = {
+  display: "block",
+  width: "100%",
+  padding: "14px",
+  borderRadius: 12,
+  background: "#e2e8f0",
+  color: "#0f172a",
+  fontWeight: 900,
+  textAlign: "center" as const,
+  textDecoration: "none",
+};
