@@ -8,7 +8,17 @@ import {
   TRADE_SCAN_BUCKET,
 } from "@/lib/solacetrade";
 
-const photoSteps = ["front", "driverSide", "rear", "odometer", "vin"];
+const requiredPhotoSteps = ["front", "driverSide", "rear", "odometer", "vin"] as const;
+
+type RequiredPhotoStep = (typeof requiredPhotoSteps)[number];
+
+const photoAliases: Record<RequiredPhotoStep, string[]> = {
+  front: ["front"],
+  driverSide: ["driverSide", "side", "driver_side"],
+  rear: ["rear"],
+  odometer: ["odometer", "mileage", "miles"],
+  vin: ["vin", "vinPhoto", "vin_photo"],
+};
 
 function extensionFor(file: File) {
   const fallback =
@@ -26,6 +36,22 @@ function extensionFor(file: File) {
   );
 }
 
+function findPhotoFile(formData: FormData, stepKey: RequiredPhotoStep) {
+  for (const key of photoAliases[stepKey]) {
+    const candidate = formData.get(key);
+
+    if (candidate instanceof File && candidate.size > 0) {
+      return {
+        stepKey,
+        submittedKey: key,
+        file: candidate,
+      };
+    }
+  }
+
+  return null;
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } },
@@ -40,28 +66,40 @@ export async function POST(
         ? "internal"
         : "customer";
 
-    // Evidence-only rule: VIN and mileage are never accepted from the customer.
-    // They must be derived later from the uploaded VIN and odometer photos.
-    const vin = "";
-    const mileage = null;
-
+    // Evidence-only rule:
+    // VIN and mileage are never accepted from the customer at intake.
+    // They are derived later from the uploaded VIN and odometer images.
     const customerName = cleanText(formData.get("customerName"), 160);
     const customerContact = cleanText(formData.get("contact"), 180);
     const salesperson = cleanText(formData.get("salesperson"), 160);
     const managerNotes = cleanText(formData.get("managerNotes"), 2500);
 
-    const photoEntries = photoSteps
-      .map((stepKey) => ({ stepKey, file: formData.get(stepKey) }))
+    const photoEntries = requiredPhotoSteps
+      .map((stepKey) => findPhotoFile(formData, stepKey))
       .filter(
-        (entry): entry is { stepKey: string; file: File } =>
-          entry.file instanceof File && entry.file.size > 0,
+        (
+          entry,
+        ): entry is {
+          stepKey: RequiredPhotoStep;
+          submittedKey: string;
+          file: File;
+        } => Boolean(entry),
       );
 
-    if (photoEntries.length !== photoSteps.length) {
+    const receivedKeys = Array.from(formData.keys());
+    const receivedPhotoSteps = photoEntries.map((entry) => entry.stepKey);
+    const missingPhotoSteps = requiredPhotoSteps.filter(
+      (stepKey) => !receivedPhotoSteps.includes(stepKey),
+    );
+
+    if (missingPhotoSteps.length > 0) {
       return NextResponse.json(
         {
           error:
             "All five guided vehicle photos are required before intake can be created.",
+          missingPhotoSteps,
+          receivedPhotoSteps,
+          receivedKeys,
         },
         { status: 400 },
       );
@@ -72,13 +110,13 @@ export async function POST(
       .from("trade_intakes")
       .insert({
         dealer_id: dealer.id,
-        status: "scanned",
+        status: "uploaded",
         mode,
         customer_name: customerName || null,
         customer_contact: customerContact || null,
         salesperson: salesperson || null,
-        vin: vin || null,
-        mileage: mileage || null,
+        vin: null,
+        mileage: null,
         manager_notes: managerNotes || null,
         photo_count: photoEntries.length,
       })
@@ -139,6 +177,7 @@ export async function POST(
       .update({
         photo_paths: uploadedPaths,
         photo_count: uploadedPaths.length,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", intake.id)
       .eq("dealer_id", dealer.id);
@@ -157,6 +196,8 @@ export async function POST(
         evidenceOnly: true,
         hasManualVin: false,
         hasManualMileage: false,
+        receivedPhotoSteps,
+        receivedKeys,
       },
     });
 
