@@ -34,39 +34,14 @@ type DecodedVehicle = {
   make: string | null;
   model: string | null;
   trim: string | null;
-};
-
-
-type MarketCompBand = {
-  low: number | null;
-  high: number | null;
-};
-
-type MarketCompSource = {
-  source: "MMR" | "KBB" | "Market API" | "Auction Proxy";
-  status: "live" | "estimated" | "not_configured" | "failed";
-  trade: MarketCompBand;
-  retail: MarketCompBand;
-  privateParty: MarketCompBand;
-  auction: MarketCompBand;
-  note: string;
-};
-
-type MarketCompSnapshot = {
-  generatedAt: string;
-  vin: string | null;
-  mileage: number | null;
-  vehicleLabel: string | null;
-  sources: MarketCompSource[];
-  acquisitionTarget: number | null;
-  tradeLow: number | null;
-  tradeHigh: number | null;
-  retailLow: number | null;
-  retailHigh: number | null;
-  privateLow: number | null;
-  privateHigh: number | null;
-  confidence: "Low" | "Medium" | "High";
-  basis: string;
+  bodyClass: string | null;
+  driveType: string | null;
+  engine: string | null;
+  fuelType: string | null;
+  doors: string | null;
+  transmission: string | null;
+  series: string | null;
+  options: string[];
 };
 
 type ExtendedSolaceValuePayload = {
@@ -88,6 +63,15 @@ type ExtendedSolaceValuePayload = {
   vehicleMake?: string | null;
   vehicleModel?: string | null;
   vehicleTrim?: string | null;
+  vehicleBodyClass?: string | null;
+  vehicleDriveType?: string | null;
+  vehicleEngine?: string | null;
+  vehicleFuelType?: string | null;
+  vehicleDoors?: string | null;
+  vehicleTransmission?: string | null;
+  vehicleSeries?: string | null;
+  vehicleOptions?: string[];
+  optionSignals?: string[];
   year?: string | number | null;
   make?: string | null;
   model?: string | null;
@@ -99,8 +83,15 @@ type ExtendedSolaceValuePayload = {
     make?: string | null;
     model?: string | null;
     trim?: string | null;
+    bodyClass?: string | null;
+    driveType?: string | null;
+    engine?: string | null;
+    fuelType?: string | null;
+    doors?: string | null;
+    transmission?: string | null;
+    series?: string | null;
+    options?: string[];
   } | null;
-  marketComps?: MarketCompSnapshot | null;
 };
 
 const gatewayUrl = "https://ai-gateway.vercel.sh/v1/chat/completions";
@@ -164,6 +155,47 @@ function cleanVehicleText(value: unknown) {
   return text;
 }
 
+function compactVehicleParts(parts: Array<unknown>, separator = " ") {
+  return (
+    parts
+      .map((part) => cleanVehicleText(part))
+      .filter(Boolean)
+      .join(separator)
+      .replace(/\s+/g, " ")
+      .trim() || null
+  );
+}
+
+function uniqueVehicleOptions(values: Array<unknown>) {
+  const seen = new Set<string>();
+  const options: string[] = [];
+
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      for (const nested of value) {
+        const cleaned = cleanVehicleText(nested);
+        if (!cleaned) continue;
+        const key = cleaned.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          options.push(cleaned);
+        }
+      }
+      continue;
+    }
+
+    const cleaned = cleanVehicleText(value);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      options.push(cleaned);
+    }
+  }
+
+  return options;
+}
+
 async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null> {
   const clean = cleanVin(vin);
 
@@ -187,14 +219,55 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
     const yearText = cleanVehicleText(result.ModelYear);
     const year = yearText ? Number(yearText) : null;
 
+    const series = compactVehicleParts([result.Series, result.Series2], " ");
+    const engine = compactVehicleParts(
+      [
+        result.EngineConfiguration,
+        result.DisplacementL ? `${result.DisplacementL}L` : null,
+        result.EngineModel,
+        result.EngineNumberofCylinders
+          ? `${result.EngineNumberofCylinders} cyl`
+          : null,
+      ],
+      " "
+    );
+    const bodyClass = cleanVehicleText(result.BodyClass);
+    const driveType = cleanVehicleText(result.DriveType);
+    const fuelType = cleanVehicleText(result.FuelTypePrimary);
+    const doors = cleanVehicleText(result.Doors);
+    const transmission = cleanVehicleText(result.TransmissionStyle);
+    const trim =
+      cleanVehicleText(result.Trim) ||
+      cleanVehicleText(result.Trim2) ||
+      series;
+
     return {
       year: Number.isFinite(year) ? year : null,
       make: cleanVehicleText(result.Make),
       model: cleanVehicleText(result.Model),
-      trim:
-        cleanVehicleText(result.Trim) ||
-        cleanVehicleText(result.Series) ||
-        cleanVehicleText(result.Series2),
+      trim,
+      bodyClass,
+      driveType,
+      engine,
+      fuelType,
+      doors,
+      transmission,
+      series,
+      options: uniqueVehicleOptions([
+        trim,
+        series,
+        bodyClass,
+        driveType,
+        engine,
+        fuelType,
+        transmission,
+        doors ? `${doors} doors` : null,
+        result.VehicleType,
+        result.GVWR,
+        result.BrakeSystemType,
+        result.OtherEngineInfo,
+        result.OtherRestraintSystemInfo,
+      ]),
     };
   } catch (error) {
     console.error("SolaceTrade VIN decode failed", {
@@ -205,334 +278,6 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
     return null;
   }
 }
-
-function numericValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const numeric = Number(String(value).replace(/[^0-9.]/g, ""));
-  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
-}
-
-function roundToNearest(value: number | null | undefined, nearest = 250) {
-  if (!value || !Number.isFinite(value)) return null;
-  return Math.round(value / nearest) * nearest;
-}
-
-function makeBand(low: unknown, high: unknown): MarketCompBand {
-  const parsedLow = numericValue(low);
-  const parsedHigh = numericValue(high);
-
-  if (parsedLow && parsedHigh) {
-    return {
-      low: Math.min(parsedLow, parsedHigh),
-      high: Math.max(parsedLow, parsedHigh),
-    };
-  }
-
-  const center = parsedLow || parsedHigh;
-  if (!center) return { low: null, high: null };
-
-  return {
-    low: roundToNearest(center * 0.97),
-    high: roundToNearest(center * 1.03),
-  };
-}
-
-function average(values: Array<number | null | undefined>) {
-  const valid = values.filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0
-  );
-
-  if (!valid.length) return null;
-
-  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
-}
-
-function blendBand(sources: MarketCompSource[], selector: (source: MarketCompSource) => MarketCompBand) {
-  return {
-    low: roundToNearest(average(sources.map((source) => selector(source).low))),
-    high: roundToNearest(average(sources.map((source) => selector(source).high))),
-  };
-}
-
-function vehicleLabelFromParts(vehicle: DecodedVehicle | null) {
-  if (!vehicle) return null;
-  const label = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return label || null;
-}
-
-async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs = 6500) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      cache: "no-store",
-    });
-
-    const json = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(
-        (json as { error?: string; message?: string })?.error ||
-          (json as { error?: string; message?: string })?.message ||
-          `HTTP ${response.status}`
-      );
-    }
-
-    return json as Record<string, unknown>;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function normalizeMarketSource(
-  source: MarketCompSource["source"],
-  payload: Record<string, unknown>,
-  fallbackNote: string
-): MarketCompSource {
-  const trade = makeBand(
-    payload.tradeLow ?? payload.tradeInLow ?? payload.wholesaleLow ?? payload.lowTrade,
-    payload.tradeHigh ?? payload.tradeInHigh ?? payload.wholesaleHigh ?? payload.highTrade
-  );
-  const retail = makeBand(
-    payload.retailLow ?? payload.dealerRetailLow ?? payload.listLow,
-    payload.retailHigh ?? payload.dealerRetailHigh ?? payload.listHigh
-  );
-  const privateParty = makeBand(
-    payload.privateLow ?? payload.privatePartyLow,
-    payload.privateHigh ?? payload.privatePartyHigh
-  );
-  const auction = makeBand(
-    payload.auctionLow ?? payload.mmrLow ?? payload.wholesaleAuctionLow,
-    payload.auctionHigh ?? payload.mmrHigh ?? payload.wholesaleAuctionHigh
-  );
-
-  return {
-    source,
-    status: "live",
-    trade,
-    retail,
-    privateParty,
-    auction,
-    note: cleanVehicleText(payload.note) || fallbackNote,
-  };
-}
-
-async function fetchOptionalMarketSource({
-  source,
-  endpoint,
-  apiKey,
-  body,
-  fallbackNote,
-}: {
-  source: MarketCompSource["source"];
-  endpoint: string | undefined;
-  apiKey: string | undefined;
-  body: Record<string, unknown>;
-  fallbackNote: string;
-}): Promise<MarketCompSource> {
-  if (!endpoint) {
-    return {
-      source,
-      status: "not_configured",
-      trade: { low: null, high: null },
-      retail: { low: null, high: null },
-      privateParty: { low: null, high: null },
-      auction: { low: null, high: null },
-      note: `${source} endpoint not configured.`,
-    };
-  }
-
-  try {
-    const payload = await fetchJsonWithTimeout(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify(body),
-    });
-
-    return normalizeMarketSource(source, payload, fallbackNote);
-  } catch (error) {
-    return {
-      source,
-      status: "failed",
-      trade: { low: null, high: null },
-      retail: { low: null, high: null },
-      privateParty: { low: null, high: null },
-      auction: { low: null, high: null },
-      note: error instanceof Error ? error.message : `${source} lookup failed.`,
-    };
-  }
-}
-
-function buildAuctionProxySource({
-  offerAmount,
-  offerRangeLow,
-  offerRangeHigh,
-  tradeBand,
-  retailBand,
-}: {
-  offerAmount: number | null;
-  offerRangeLow: number | null;
-  offerRangeHigh: number | null;
-  tradeBand: MarketCompBand;
-  retailBand: MarketCompBand;
-}): MarketCompSource {
-  const tradeCenter = average([tradeBand.low, tradeBand.high]);
-  const retailCenter = average([retailBand.low, retailBand.high]);
-  const anchor = tradeCenter || offerAmount || average([offerRangeLow, offerRangeHigh]);
-
-  if (!anchor) {
-    return {
-      source: "Auction Proxy",
-      status: "not_configured",
-      trade: { low: null, high: null },
-      retail: { low: null, high: null },
-      privateParty: { low: null, high: null },
-      auction: { low: null, high: null },
-      note: "No market source or offer anchor was available for an auction proxy.",
-    };
-  }
-
-  const auctionCenter = tradeCenter || anchor;
-  const retail = retailCenter
-    ? { low: roundToNearest(retailCenter * 0.96), high: roundToNearest(retailCenter * 1.04) }
-    : { low: roundToNearest(anchor * 1.18), high: roundToNearest(anchor * 1.34) };
-
-  return {
-    source: "Auction Proxy",
-    status: "estimated",
-    trade: {
-      low: roundToNearest(anchor * 0.96),
-      high: roundToNearest(anchor * 1.06),
-    },
-    retail,
-    privateParty: {
-      low: roundToNearest((retail.low || anchor * 1.16) * 0.92),
-      high: roundToNearest((retail.high || anchor * 1.3) * 0.96),
-    },
-    auction: {
-      low: roundToNearest(auctionCenter * 0.95),
-      high: roundToNearest(auctionCenter * 1.05),
-    },
-    note: "Calculated fallback using available wholesale/retail anchors, mileage, and dealer acquisition buffer.",
-  };
-}
-
-async function getMarketComps({
-  vin,
-  mileage,
-  vehicle,
-  offerAmount,
-  offerRangeLow,
-  offerRangeHigh,
-  dealer,
-}: {
-  vin: string | null;
-  mileage: number | null;
-  vehicle: DecodedVehicle | null;
-  offerAmount: number | null;
-  offerRangeLow: number | null;
-  offerRangeHigh: number | null;
-  dealer: { city?: string | null; state?: string | null; name?: string | null };
-}): Promise<MarketCompSnapshot> {
-  const body = {
-    vin,
-    mileage,
-    year: vehicle?.year || null,
-    make: vehicle?.make || null,
-    model: vehicle?.model || null,
-    trim: vehicle?.trim || null,
-    dealerCity: dealer.city || null,
-    dealerState: dealer.state || null,
-    dealerName: dealer.name || null,
-  };
-
-  const [mmr, kbb, marketApi] = await Promise.all([
-    fetchOptionalMarketSource({
-      source: "MMR",
-      endpoint: process.env.SOLACETRADE_MMR_ENDPOINT,
-      apiKey: process.env.SOLACETRADE_MMR_API_KEY,
-      body,
-      fallbackNote: "Live MMR/auction value returned from configured provider.",
-    }),
-    fetchOptionalMarketSource({
-      source: "KBB",
-      endpoint: process.env.SOLACETRADE_KBB_ENDPOINT,
-      apiKey: process.env.SOLACETRADE_KBB_API_KEY,
-      body,
-      fallbackNote: "Live KBB-style trade/private/retail value returned from configured provider.",
-    }),
-    fetchOptionalMarketSource({
-      source: "Market API",
-      endpoint: process.env.SOLACETRADE_MARKET_COMP_ENDPOINT,
-      apiKey: process.env.SOLACETRADE_MARKET_COMP_API_KEY,
-      body,
-      fallbackNote: "Live retail listing/market comp value returned from configured provider.",
-    }),
-  ]);
-
-  const liveSources = [mmr, kbb, marketApi].filter((source) => source.status === "live");
-  const tradeBand = blendBand(liveSources, (source) => source.trade);
-  const retailBand = blendBand(liveSources, (source) => source.retail);
-  const privateBand = blendBand(liveSources, (source) => source.privateParty);
-  const auctionBand = blendBand(liveSources, (source) => source.auction);
-  const proxy = buildAuctionProxySource({
-    offerAmount,
-    offerRangeLow,
-    offerRangeHigh,
-    tradeBand: tradeBand.low || tradeBand.high ? tradeBand : auctionBand,
-    retailBand,
-  });
-
-  const effectiveSources = [...liveSources, proxy].filter(
-    (source) => source.status === "live" || source.status === "estimated"
-  );
-  const finalTrade = blendBand(effectiveSources, (source) => source.trade);
-  const finalRetail = blendBand(effectiveSources, (source) => source.retail);
-  const finalPrivate = blendBand(effectiveSources, (source) => source.privateParty);
-  const finalAuction = blendBand(effectiveSources, (source) => source.auction);
-  const acquisitionAnchor =
-    finalAuction.low || finalTrade.low || offerRangeLow || offerAmount || null;
-  const acquisitionTarget = acquisitionAnchor
-    ? roundToNearest(acquisitionAnchor * (liveSources.length ? 0.985 : 1))
-    : null;
-
-  return {
-    generatedAt: new Date().toISOString(),
-    vin,
-    mileage,
-    vehicleLabel: vehicleLabelFromParts(vehicle),
-    sources: [mmr, kbb, marketApi, proxy],
-    acquisitionTarget,
-    tradeLow: finalTrade.low,
-    tradeHigh: finalTrade.high,
-    retailLow: finalRetail.low,
-    retailHigh: finalRetail.high,
-    privateLow: finalPrivate.low,
-    privateHigh: finalPrivate.high,
-    confidence: liveSources.length >= 2 ? "High" : liveSources.length === 1 ? "Medium" : "Low",
-    basis: liveSources.length
-      ? "Live configured market source(s) blended with auction-proxy acquisition guardrail."
-      : "Auction-proxy fallback only. Configure MMR/KBB/market endpoints for live comps.",
-  };
-}
-
-function marketRangeText(low: number | null, high: number | null) {
-  if (low && high) return `${formatMoney(low)}-${formatMoney(high)}`;
-  if (low || high) return formatMoney(low || high);
-  return "not available";
-}
-
 
 export async function POST(
   request: NextRequest,
@@ -646,21 +391,39 @@ Return ONLY valid JSON with this exact shape:
   "vehicleMake": string | null,
   "vehicleModel": string | null,
   "vehicleTrim": string | null,
+  "vehicleBodyClass": string | null,
+  "vehicleDriveType": string | null,
+  "vehicleEngine": string | null,
+  "vehicleFuelType": string | null,
+  "vehicleDoors": string | null,
+  "vehicleTransmission": string | null,
+  "vehicleSeries": string | null,
+  "vehicleOptions": string[],
+  "optionSignals": string[],
   "vehicle": {
     "vin": string | null,
     "mileage": number | null,
     "year": number | null,
     "make": string | null,
     "model": string | null,
-    "trim": string | null
+    "trim": string | null,
+    "bodyClass": string | null,
+    "driveType": string | null,
+    "engine": string | null,
+    "fuelType": string | null,
+    "doors": string | null,
+    "transmission": string | null,
+    "series": string | null,
+    "options": string[]
   }
 }
 
 Rules:
 - If VIN is not visible, detectedVin must be null.
 - If mileage is not visible, detectedMileage must be null.
-- If year, make, model, or trim are not visible from the image evidence, set them to null. The server will decode those fields from the detected VIN when possible.
-- Do not invent VIN, mileage, year, make, model, or trim.
+- If year, make, model, trim, body class, drivetrain, engine, fuel type, doors, transmission, series, or options are not visible from the image evidence, set them to null or [] as appropriate. The server will decode stable fields from the detected VIN when possible.
+- Use optionSignals for visible equipment clues from photos only, such as badging, wheel style, sunroof, tow package, 4x4/AWD badge, interior screen, leather, roof rails, or driver-assist sensors.
+- Do not invent VIN, mileage, year, make, model, trim, drivetrain, engine, packages, or options.
 - If VIN or mileage cannot be read, admissibility should be PARTIAL.
 - Keep summaryLines customer-friendly.
 - Keep dealerReviewNotes operational and concise.
@@ -735,7 +498,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           },
         ],
         temperature: 0.2,
-        max_tokens: 900,
+        max_tokens: 1200,
       }),
     });
 
@@ -788,43 +551,45 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     const vehicleTrim =
       decodedVehicle?.trim ||
       cleanVehicleText(parsed.vehicleTrim || parsed.trim || parsed.vehicle?.trim);
-
-    const marketComps = await getMarketComps({
-      vin: detectedVin || null,
-      mileage: detectedMileage,
-      vehicle: {
-        year: typeof vehicleYear === "number" ? vehicleYear : numericValue(vehicleYear),
-        make: vehicleMake,
-        model: vehicleModel,
-        trim: vehicleTrim,
-      },
-      offerAmount: parsed.offerAmount,
-      offerRangeLow: parsed.offerRangeLow,
-      offerRangeHigh: parsed.offerRangeHigh,
-      dealer,
-    });
-
-    const marketBackedOffer =
-      marketComps.acquisitionTarget ||
-      parsed.offerAmount ||
-      marketComps.tradeLow ||
-      null;
-    const marketBackedRangeLow =
-      marketComps.tradeLow || parsed.offerRangeLow || marketBackedOffer;
-    const marketBackedRangeHigh =
-      marketComps.tradeHigh || parsed.offerRangeHigh || marketBackedOffer;
-
-    const marketSummaryLines = [
-      `Instant offer reflects dealer acquisition value, reconditioning risk, and mileage verification.`,
-      `Market retail band: ${marketRangeText(marketComps.retailLow, marketComps.retailHigh)}.`,
-      `Trade/acquisition band: ${marketRangeText(marketComps.tradeLow, marketComps.tradeHigh)}.`,
-    ];
+    const vehicleBodyClass =
+      decodedVehicle?.bodyClass ||
+      cleanVehicleText(parsed.vehicleBodyClass || parsed.vehicle?.bodyClass);
+    const vehicleDriveType =
+      decodedVehicle?.driveType ||
+      cleanVehicleText(parsed.vehicleDriveType || parsed.vehicle?.driveType);
+    const vehicleEngine =
+      decodedVehicle?.engine ||
+      cleanVehicleText(parsed.vehicleEngine || parsed.vehicle?.engine);
+    const vehicleFuelType =
+      decodedVehicle?.fuelType ||
+      cleanVehicleText(parsed.vehicleFuelType || parsed.vehicle?.fuelType);
+    const vehicleDoors =
+      decodedVehicle?.doors ||
+      cleanVehicleText(parsed.vehicleDoors || parsed.vehicle?.doors);
+    const vehicleTransmission =
+      decodedVehicle?.transmission ||
+      cleanVehicleText(parsed.vehicleTransmission || parsed.vehicle?.transmission);
+    const vehicleSeries =
+      decodedVehicle?.series ||
+      cleanVehicleText(parsed.vehicleSeries || parsed.vehicle?.series);
+    const optionSignals = uniqueVehicleOptions(parsed.optionSignals || []);
+    const vehicleOptions = uniqueVehicleOptions([
+      decodedVehicle?.options || [],
+      parsed.vehicleOptions || [],
+      parsed.vehicle?.options || [],
+      optionSignals,
+      vehicleTrim,
+      vehicleBodyClass,
+      vehicleDriveType,
+      vehicleEngine,
+      vehicleFuelType,
+      vehicleTransmission,
+      vehicleDoors ? `${vehicleDoors} doors` : null,
+      vehicleSeries,
+    ]);
 
     const valuePayload = {
       ...parsed,
-      offerAmount: marketBackedOffer,
-      offerRangeLow: marketBackedRangeLow,
-      offerRangeHigh: marketBackedRangeHigh,
       detectedVin: detectedVin || null,
       detectedMileage,
       vin: detectedVin || null,
@@ -833,11 +598,19 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       vehicleMake,
       vehicleModel,
       vehicleTrim,
+      vehicleBodyClass,
+      vehicleDriveType,
+      vehicleEngine,
+      vehicleFuelType,
+      vehicleDoors,
+      vehicleTransmission,
+      vehicleSeries,
+      vehicleOptions,
+      optionSignals,
       year: vehicleYear,
       make: vehicleMake,
       model: vehicleModel,
       trim: vehicleTrim,
-      marketComps,
       vehicle: {
         vin: detectedVin || null,
         mileage: detectedMileage,
@@ -845,21 +618,18 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         make: vehicleMake,
         model: vehicleModel,
         trim: vehicleTrim,
+        bodyClass: vehicleBodyClass,
+        driveType: vehicleDriveType,
+        engine: vehicleEngine,
+        fuelType: vehicleFuelType,
+        doors: vehicleDoors,
+        transmission: vehicleTransmission,
+        series: vehicleSeries,
+        options: vehicleOptions,
       },
-      summaryLines: [
-        ...marketSummaryLines,
-        ...(parsed.summaryLines || []).filter(
-          (line) => !marketSummaryLines.includes(line)
-        ),
-      ].slice(0, 5),
-      dealerReviewNotes: [
-        ...(parsed.dealerReviewNotes || []),
-        `Market comp basis: ${marketComps.basis}`,
-      ],
-      confidence: marketComps.confidence === "High" ? "High" : parsed.confidence || marketComps.confidence,
       title:
         parsed.title ||
-        `Instant cash offer: ${formatMoney(marketBackedOffer)}`,
+        `Instant cash offer: ${formatMoney(parsed.offerAmount)}`,
     };
 
     const updatePayload = {
@@ -898,18 +668,6 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           make: vehicleMake,
           model: vehicleModel,
           trim: vehicleTrim,
-        },
-        marketComps: {
-          confidence: marketComps.confidence,
-          acquisitionTarget: marketComps.acquisitionTarget,
-          tradeLow: marketComps.tradeLow,
-          tradeHigh: marketComps.tradeHigh,
-          retailLow: marketComps.retailLow,
-          retailHigh: marketComps.retailHigh,
-          sourceStatuses: marketComps.sources.map((source) => ({
-            source: source.source,
-            status: source.status,
-          })),
         },
         offerAmount: valuePayload.offerAmount,
         confidence: valuePayload.confidence,
