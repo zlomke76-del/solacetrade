@@ -529,7 +529,7 @@ export default async function DealerLeadDetailPage({ params }: PageProps) {
                   }}
                 >
                   {vehicleDetails.map(([label, value]) => (
-                    <MiniCard key={label} label={String(label)} value={String(value)} />
+                    <MiniCard key={String(label)} label={String(label)} value={String(value)} />
                   ))}
                 </div>
               </div>
