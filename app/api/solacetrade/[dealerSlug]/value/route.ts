@@ -1473,8 +1473,6 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       confidence: finalConfidence,
       admissibility: finalAdmissibility,
       offerAmount: adjustedOfferAmount,
-      confidence: finalConfidence,
-      admissibility: finalAdmissibility,
       missingItems,
       inspectionRequired,
       visualConditionConfidence,
