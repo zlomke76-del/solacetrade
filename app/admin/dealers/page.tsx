@@ -1075,6 +1075,7 @@ export default function AdminDealersPage() {
                     >
                       <MiniField label="Customer link" value={`/${dealer.slug}`} />
                       <MiniField label="Internal link" value={`/${dealer.slug}/internal`} />
+                      <MiniField label="CRM dashboard" value={`/dealer/${dealer.slug}/dashboard`} />
                       <MiniField
                         label="Additional routing"
                         value={extraRoutingCount ? `${extraRoutingCount} additional` : "None"}
@@ -1127,6 +1128,23 @@ export default function AdminDealersPage() {
                         }}
                       >
                         Open internal
+                      </a>
+                      <a
+                        href={`/dealer/${dealer.slug}/dashboard`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: 12,
+                          background: "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                          color: "#1d4ed8",
+                          textDecoration: "none",
+                          fontSize: 12,
+                          fontWeight: 900,
+                        }}
+                      >
+                        Open CRM
                       </a>
                       <button
                         type="button"
