@@ -22,6 +22,7 @@ export default function Page() {
           .dealer-clarity-grid { grid-template-columns: 1fr !important; }
           .dealer-signup-grid { grid-template-columns: 1fr !important; }
           .trade-flow-grid { grid-template-columns: 1fr !important; }
+          .trade-flow-grid > div[aria-hidden="true"] { display: none !important; }
           .manager-review-card { order: 2; }
           .scan-card-wrap { order: 1; }
         }
@@ -259,6 +260,7 @@ export default function Page() {
         </div>
 
         <div className="trade-flow-grid" style={tradeFlowGrid}>
+          <div aria-hidden="true" style={flowArrow}>→</div>
           <div className="scan-card-wrap" style={scanColumn}>
             <div
               style={{
@@ -291,7 +293,7 @@ export default function Page() {
 
             <h3 style={managerReviewTitle}>Manager review — ready instantly.</h3>
             <p style={managerReviewCopy}>
-              Every scan builds a clean packet your desk can actually use.
+              Ready for your desk the moment the scan is complete.
             </p>
 
             <div style={managerImageShell}>
@@ -309,15 +311,11 @@ export default function Page() {
               </div>
               <div style={managerBulletItem}>
                 <span style={managerBulletCheck}>✓</span>
-                <span>Trim and options decoded automatically</span>
+                <span>Trim and options decoded</span>
               </div>
               <div style={managerBulletItem}>
                 <span style={managerBulletCheck}>✓</span>
-                <span>Routed to your used car manager flow</span>
-              </div>
-              <div style={managerBulletItem}>
-                <span style={managerBulletCheck}>✓</span>
-                <span>No more chasing incomplete trade forms</span>
+                <span>Delivered to your manager workflow</span>
               </div>
             </div>
           </aside>
@@ -595,10 +593,31 @@ const vehicleArtOverlay: CSSProperties = {
 
 const tradeFlowGrid: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 760px) minmax(310px, 380px)",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
   justifyContent: "center",
   alignItems: "start",
-  gap: 18,
+  gap: 24,
+  position: "relative",
+};
+
+const flowArrow: CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  top: "42%",
+  transform: "translate(-50%, -50%)",
+  width: 38,
+  height: 38,
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "white",
+  border: "1px solid #fecaca",
+  color: "#b91c1c",
+  fontSize: 22,
+  fontWeight: 950,
+  boxShadow: "0 16px 36px rgba(15,23,42,0.12)",
+  zIndex: 4,
 };
 
 const scanColumn: CSSProperties = {
@@ -706,7 +725,7 @@ const managerBulletCheck: CSSProperties = {
 };
 
 const dealerPacketBar: CSSProperties = {
-  maxWidth: 760,
+  maxWidth: 1160,
   margin: "16px auto 0",
   padding: 14,
   borderRadius: 24,
