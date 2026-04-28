@@ -573,9 +573,9 @@ export default function TradeDesk({
       style={{
         width: "100%",
         border: "1px solid rgba(148,163,184,0.28)",
-        borderRadius: 26,
+        borderRadius: 22,
         background: "rgba(255,255,255,0.98)",
-        boxShadow: "0 24px 70px rgba(15,23,42,0.12)",
+        boxShadow: "0 18px 52px rgba(15,23,42,0.11)",
         overflow: "hidden",
       }}
     >
@@ -590,7 +590,7 @@ export default function TradeDesk({
 
       <div
         style={{
-          padding: "16px 16px 13px",
+          padding: "10px 12px 9px",
           background:
             "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,41,59,0.96))",
           color: "white",
@@ -629,15 +629,15 @@ export default function TradeDesk({
             />
             {isInternal ? "Manager Packet" : "Instant Offer Scan"}
           </div>
-          <strong style={{ fontSize: 12, opacity: 0.86 }}>
-            {capturedCount}/5 photos
+          <strong style={{ fontSize: 11, opacity: 0.86 }}>
+            {capturedCount > 0 ? "Building offer…" : "Ready"}
           </strong>
         </div>
 
         <h2
           style={{
-            margin: "12px 0 6px",
-            fontSize: "clamp(21px, 4vw, 30px)",
+            margin: "8px 0 4px",
+            fontSize: "clamp(19px, 3vw, 24px)",
             lineHeight: 1.04,
             letterSpacing: "-0.045em",
           }}
@@ -648,19 +648,19 @@ export default function TradeDesk({
           style={{
             margin: 0,
             color: "rgba(255,255,255,0.76)",
-            fontSize: 14,
-            lineHeight: 1.42,
+            fontSize: 12,
+            lineHeight: 1.32,
           }}
         >
           {started
             ? currentStep.coaching
-            : "Takes about 30 seconds. Solace reads the VIN and mileage from the scan evidence."}
+            : "Takes about 30 seconds. Your offer builds as you scan."}
         </p>
 
         <div
           style={{
-            height: 7,
-            marginTop: 14,
+            height: 5,
+            marginTop: 9,
             borderRadius: 999,
             background: "rgba(255,255,255,0.14)",
             overflow: "hidden",
@@ -678,14 +678,14 @@ export default function TradeDesk({
         </div>
       </div>
 
-      <div style={{ padding: 14 }}>
+      <div style={{ padding: "10px 12px 8px" }}>
         <button
           type="button"
           onClick={openCameraOrFilePicker}
           style={{
             position: "relative",
             width: "100%",
-            minHeight: 236,
+            minHeight: 154,
             border: "none",
             borderRadius: 22,
             overflow: "hidden",
@@ -701,7 +701,7 @@ export default function TradeDesk({
             alt={`${currentStep.label} guide`}
             style={{
               width: "100%",
-              height: 236,
+              height: 154,
               display: "block",
               objectFit: "cover",
               filter: "brightness(0.66) saturate(1.05)",
@@ -718,7 +718,7 @@ export default function TradeDesk({
           <div
             style={{
               position: "absolute",
-              inset: "14% 10% 18%",
+              inset: "12% 10% 18%",
               border: "2px dashed rgba(255,255,255,0.50)",
               borderRadius: 22,
             }}
@@ -728,16 +728,16 @@ export default function TradeDesk({
               position: "absolute",
               top: "50%",
               left: "50%",
-              width: 52,
-              height: 52,
-              marginLeft: -26,
-              marginTop: -26,
+              width: 42,
+              height: 42,
+              marginLeft: -21,
+              marginTop: -21,
               borderRadius: "50%",
               background: "rgba(255,255,255,0.94)",
               display: "grid",
               placeItems: "center",
               color: dark,
-              fontSize: 29,
+              fontSize: 24,
               fontWeight: 900,
               boxShadow: "0 18px 40px rgba(0,0,0,0.34)",
             }}
@@ -747,20 +747,20 @@ export default function TradeDesk({
           <div
             style={{
               position: "absolute",
-              left: 15,
-              right: 15,
-              bottom: 13,
+              left: 12,
+              right: 12,
+              bottom: 10,
               color: "white",
             }}
           >
-            <strong style={{ display: "block", fontSize: 16 }}>
+            <strong style={{ display: "block", fontSize: 14 }}>
               {currentStep.help}
             </strong>
             <span
               style={{
                 display: "block",
-                marginTop: 4,
-                fontSize: 12,
+                marginTop: 2,
+                fontSize: 11,
                 opacity: 0.84,
               }}
             >
@@ -773,8 +773,8 @@ export default function TradeDesk({
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-            gap: 7,
-            marginTop: 10,
+            gap: 6,
+            marginTop: 8,
           }}
         >
           {captureSteps.map((step, index) => {
@@ -789,8 +789,8 @@ export default function TradeDesk({
                   setStepIndex(index);
                 }}
                 style={{
-                  minHeight: 40,
-                  borderRadius: 13,
+                  minHeight: 32,
+                  borderRadius: 11,
                   border: active
                     ? `2px solid ${isInternal ? "#0284c7" : red}`
                     : "1px solid #e2e8f0",
@@ -809,12 +809,12 @@ export default function TradeDesk({
         </div>
       </div>
 
-      <div style={{ padding: "0 14px 16px" }}>
+      <div style={{ padding: "0 12px 12px" }}>
         <div
           style={{
             border: "1px solid #e2e8f0",
-            borderRadius: 21,
-            padding: 14,
+            borderRadius: 18,
+            padding: 12,
             background: "#f8fafc",
           }}
         >
@@ -831,7 +831,7 @@ export default function TradeDesk({
               <h3 style={{ margin: 0, fontSize: 18 }}>
                 {showDetails
                   ? "Ready to get your real offer"
-                  : "Start the vehicle scan"}
+                  : "Start your scan"}
               </h3>
               <p
                 style={{
@@ -842,10 +842,10 @@ export default function TradeDesk({
                 }}
               >
                 {showDetails
-                  ? "Solace will read the scan evidence and return the offer before asking what you want to do next."
-                  : nextMissing
-                    ? `Next needed: ${nextMissing}.`
-                    : "Tap Start Scan to begin."}
+                  ? "Your scan is complete. Get the offer now."
+                  : capturedCount === 0
+                    ? "Tap below to begin."
+                    : "Keep scanning — your offer is updating."}
               </p>
             </div>
             <div
@@ -859,7 +859,9 @@ export default function TradeDesk({
             >
               {scanComplete
                 ? "Ready"
-                : `${captureSteps.length - capturedCount} left`}
+                : capturedCount === 0
+                  ? "Start"
+                  : `${captureSteps.length - capturedCount} left`}
             </div>
           </div>
 
@@ -1004,8 +1006,8 @@ export default function TradeDesk({
               onClick={createIntakeAndValue}
               style={{
                 width: "100%",
-                marginTop: showDetails ? 11 : 13,
-                padding: 15,
+                marginTop: showDetails ? 10 : 11,
+                padding: 13,
                 border: "none",
                 borderRadius: 16,
                 background: isInternal ? dark : red,
@@ -1033,7 +1035,7 @@ export default function TradeDesk({
                     ? "Add customer name and deal number"
                     : capturedCount === 0
                       ? "Start Scan"
-                      : `Continue Scan (${captureSteps.length - capturedCount} left)`}
+                      : "Continue Scan"}
             </button>
           )}
         </div>
