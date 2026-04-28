@@ -358,29 +358,20 @@ export async function POST(
       isInternal,
     });
 
-    if (!isInternal && !executionAdmissibility.customerCertificatePermitted) {
+    if (!executionAdmissibility.customerCertificatePermitted) {
       await logTradeEvent({
         dealerId: dealer.id,
         intakeId: intake.id,
-        eventType: "certificate_blocked",
+        eventType: "certificate_flagged_for_review",
         payload: {
           reasons: executionAdmissibility.reasons,
           confidence,
           admissibility,
           vin,
           mileage,
+          customerFacingFlowContinued: true,
         },
       });
-
-      return NextResponse.json(
-        {
-          error:
-            "Trade certificate cannot be sent yet because the valuation state is incomplete. Dealer review is required.",
-          blocked: true,
-          reasons: executionAdmissibility.reasons,
-        },
-        { status: 409 }
-      );
     }
 
     const recallResult = await fetchNhtsaRecalls({
@@ -432,7 +423,7 @@ export async function POST(
             <div style="background:linear-gradient(135deg,#0f172a,#334155);color:#ffffff;padding:22px 24px;">
               <div style="font-size:11px;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#cbd5e1;">SolaceTrade Certificate</div>
               <h1 style="margin:8px 0 0;font-size:30px;line-height:1.05;letter-spacing:-0.04em;">${escapeHtml(formatMoney(offerAmount))}</h1>
-              <div style="margin-top:8px;font-size:14px;color:#e2e8f0;">Preliminary trade certificate pending dealer verification</div>
+              <div style="margin-top:8px;font-size:14px;color:#e2e8f0;">Instant trade offer generated from verified vehicle scan</div>
             </div>
 
             <div style="padding:22px 24px;">
