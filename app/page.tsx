@@ -416,13 +416,6 @@ const waiverBadge: CSSProperties = {
   marginBottom: 8,
 };
 
-const disabledSetupFeeBox: CSSProperties = {
-  ...secondaryBtn,
-  background: "#f1f5f9",
-  color: "#64748b",
-  cursor: "not-allowed",
-  opacity: 0.82,
-};
 
 const heroVehicleArt: CSSProperties = {
   position: "absolute",
@@ -763,4 +756,13 @@ const secondaryBtn: CSSProperties = {
   fontSize: 15,
   textDecoration: "none",
   border: "1px solid #e2e8f0",
+};
+
+
+const disabledSetupFeeBox: CSSProperties = {
+  ...secondaryBtn,
+  background: "#f1f5f9",
+  color: "#64748b",
+  cursor: "not-allowed",
+  opacity: 0.78,
 };
