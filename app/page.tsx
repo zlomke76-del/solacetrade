@@ -14,8 +14,15 @@ export default function Page() {
       }}
     >
       <style>{`
-        @media (max-width: 1180px) {
-          .hero-vehicle-art { width: 250px !important; height: 250px !important; }
+        @media (max-width: 1280px) {
+          .hero-vehicle-art { width: 230px !important; height: 230px !important; top: 36px !important; }
+          .hero-copy-wrap { max-width: 620px !important; }
+          .hero-title { font-size: clamp(34px, 4.8vw, 50px) !important; line-height: 0.98 !important; }
+        }
+         (max-width: 1120px) {
+          .hero-vehicle-art { width: 210px !important; height: 220px !important; }
+          .hero-copy-wrap { max-width: 560px !important; }
+          .hero-title { font-size: clamp(30px, 4.4vw, 44px) !important; letter-spacing: -0.048em !important; }
         }
         @media (max-width: 980px) {
           .hero-vehicle-art { display: none !important; }
@@ -107,7 +114,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div className="hero-copy-wrap" style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2 }}>
           <div
             style={{
               display: "inline-flex",
@@ -128,10 +135,11 @@ export default function Page() {
           </div>
 
           <h1
+            className="hero-title"
             style={{
               margin: "0 auto 10px",
               maxWidth: 780,
-              fontSize: "clamp(34px, 6vw, 62px)",
+              fontSize: "clamp(32px, 5vw, 62px)",
               lineHeight: 0.95,
               letterSpacing: "-0.058em",
             }}
