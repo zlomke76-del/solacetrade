@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { sendDealerFollowupEmail } from "@/lib/email";
 import {
   buildMarketContext,
   cleanMileage,
@@ -1193,43 +1192,13 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         admissibility: valuePayload.admissibility,
       },
     });
-// 🔥 120-second dealer follow-up (non-blocking)
-setTimeout(async () => {
-  try {
-    await sendDealerFollowupEmail({
-      dealer: {
-        name: dealer.name,
-        email: dealer.email || null,
-      },
-      lead: {
-        customer_name: intake.customer_name,
-        customer_email: intake.customer_contact, // assuming email stored here
-        vehicleLabel:
-          `${vehicleYear || ""} ${vehicleMake || ""} ${vehicleModel || ""} ${vehicleTrim || ""}`
-            .replace(/\s+/g, " ")
-            .trim() || "vehicle",
-        offerAmount: valuePayload.offerAmount,
-      },
-    });
-  } catch (err) {
-    console.error("Dealer follow-up email failed", err);
-  }
-}, 120000);
-    
-    return NextResponse.json({
-      intakeId: intake.id,
-      dealer: {
-        id: dealer.id,
-        slug: dealer.slug,
-        name: dealer.name,
-        marketContext,
-      },
-      value: valuePayload,
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown value error.";
-
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
+return NextResponse.json({
+  intakeId: intake.id,
+  dealer: {
+    id: dealer.id,
+    slug: dealer.slug,
+    name: dealer.name,
+    marketContext,
+  },
+  value: valuePayload,
+});
