@@ -22,13 +22,13 @@ type Dealer = {
    * Future-backed fields. These are optional so this page still works against the
    * current dealers table/API while the billing + routing schema is finalized.
    */
-  routing_cc_emails?: string | null;
+  routing_cc_emails?: string[] | string | null;
   billing_contact_name?: string | null;
-  billing_contact_email?: string | null;
-  billing_contact_phone?: string | null;
+  billing_email?: string | null;
+  billing_phone?: string | null;
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
-  stripe_subscription_status?: string | null;
+  billing_status?: string | null;
 };
 
 type DealerForm = {
@@ -40,11 +40,11 @@ type DealerForm = {
   lead_email: string;
   routing_cc_emails: string;
   billing_contact_name: string;
-  billing_contact_email: string;
-  billing_contact_phone: string;
+  billing_email: string;
+  billing_phone: string;
   stripe_customer_id: string;
   stripe_subscription_id: string;
-  stripe_subscription_status: string;
+  billing_status: string;
   address_line: string;
   city: string;
   state: string;
@@ -62,11 +62,11 @@ const blankForm: DealerForm = {
   lead_email: "",
   routing_cc_emails: "",
   billing_contact_name: "",
-  billing_contact_email: "",
-  billing_contact_phone: "",
+  billing_email: "",
+  billing_phone: "",
   stripe_customer_id: "",
   stripe_subscription_id: "",
-  stripe_subscription_status: "not_configured",
+  billing_status: "not_started",
   address_line: "",
   city: "",
   state: "",
@@ -100,13 +100,13 @@ function dealerToForm(dealer: Dealer): DealerForm {
     legal_name: dealer.legal_name || "",
     sales_phone: dealer.sales_phone || "",
     lead_email: dealer.lead_email || "",
-    routing_cc_emails: dealer.routing_cc_emails || "",
+    routing_cc_emails: normalizeEmailList(dealer.routing_cc_emails),
     billing_contact_name: dealer.billing_contact_name || "",
-    billing_contact_email: dealer.billing_contact_email || "",
-    billing_contact_phone: dealer.billing_contact_phone || "",
+    billing_email: dealer.billing_email || "",
+    billing_phone: dealer.billing_phone || "",
     stripe_customer_id: dealer.stripe_customer_id || "",
     stripe_subscription_id: dealer.stripe_subscription_id || "",
-    stripe_subscription_status: dealer.stripe_subscription_status || "not_configured",
+    billing_status: dealer.billing_status || "not_started",
     address_line: dealer.address_line || "",
     city: dealer.city || "",
     state: dealer.state || "",
@@ -120,9 +120,21 @@ function hasEmail(value: string | null | undefined) {
   return Boolean(value && value.includes("@"));
 }
 
-function countEmailList(value: string | null | undefined) {
-  if (!value) return 0;
-  return value
+function normalizeEmailList(value: string[] | string | null | undefined) {
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(", ");
+  }
+
+  return String(value);
+}
+
+function countEmailList(value: string[] | string | null | undefined) {
+  const normalized = normalizeEmailList(value);
+  if (!normalized) return 0;
+
+  return normalized
     .split(/[;,\n]/g)
     .map((email) => email.trim())
     .filter((email) => email.includes("@")).length;
@@ -250,7 +262,7 @@ export default function AdminDealersPage() {
 
   const isEditing = Boolean(form.id);
   const routingCcCount = countEmailList(form.routing_cc_emails);
-  const billingReady = hasEmail(form.billing_contact_email);
+  const billingReady = hasEmail(form.billing_email);
   const stripeReady = Boolean(form.stripe_customer_id || form.stripe_subscription_id);
 
   const filteredDealers = useMemo(() => {
@@ -264,7 +276,7 @@ export default function AdminDealersPage() {
         dealer.lead_email,
         dealer.routing_cc_emails,
         dealer.billing_contact_name,
-        dealer.billing_contact_email,
+        dealer.billing_email,
         dealer.stripe_customer_id,
         dealer.city,
         dealer.state,
@@ -336,6 +348,10 @@ export default function AdminDealersPage() {
         legal_name: form.legal_name,
         sales_phone: form.sales_phone,
         lead_email: form.lead_email,
+        routing_cc_emails: form.routing_cc_emails,
+        billing_contact_name: form.billing_contact_name,
+        billing_email: form.billing_email,
+        billing_phone: form.billing_phone,
         address_line: form.address_line,
         city: form.city,
         state: form.state,
@@ -359,15 +375,15 @@ export default function AdminDealersPage() {
       const futureFieldsEntered = Boolean(
         form.routing_cc_emails ||
           form.billing_contact_name ||
-          form.billing_contact_email ||
-          form.billing_contact_phone ||
+          form.billing_email ||
+          form.billing_phone ||
           form.stripe_customer_id ||
           form.stripe_subscription_id,
       );
 
       setStatus(
         futureFieldsEntered
-          ? `${isEditing ? "Dealer updated" : "Dealer created"}. Billing, CC routing, and Stripe fields are staged in the UI; add the database/API fields before they persist.`
+          ? `${isEditing ? "Dealer updated" : "Dealer created"}. Billing and CC routing saved. Stripe fields are managed by checkout/webhooks.`
           : isEditing
             ? "Dealer updated."
             : "Dealer created.",
@@ -724,8 +740,8 @@ export default function AdminDealersPage() {
                     Billing Email
                     <input
                       type="email"
-                      value={form.billing_contact_email}
-                      onChange={(event) => updateField("billing_contact_email", event.target.value)}
+                      value={form.billing_email}
+                      onChange={(event) => updateField("billing_email", event.target.value)}
                       placeholder="billing@dealer.com"
                       style={fieldStyle()}
                     />
@@ -734,8 +750,8 @@ export default function AdminDealersPage() {
                   <label style={labelStyle()}>
                     Billing Phone
                     <input
-                      value={form.billing_contact_phone}
-                      onChange={(event) => updateField("billing_contact_phone", event.target.value)}
+                      value={form.billing_phone}
+                      onChange={(event) => updateField("billing_phone", event.target.value)}
                       placeholder="Optional"
                       style={fieldStyle()}
                     />
@@ -764,11 +780,11 @@ export default function AdminDealersPage() {
                   <label style={labelStyle()}>
                     Subscription Status
                     <select
-                      value={form.stripe_subscription_status}
-                      onChange={(event) => updateField("stripe_subscription_status", event.target.value)}
+                      value={form.billing_status}
+                      onChange={(event) => updateField("billing_status", event.target.value)}
                       style={fieldStyle()}
                     >
-                      <option value="not_configured">Not configured</option>
+                      <option value="not_started">Not started</option>
                       <option value="trialing">Trialing</option>
                       <option value="active">Active</option>
                       <option value="past_due">Past due</option>
@@ -1001,7 +1017,7 @@ export default function AdminDealersPage() {
               {filteredDealers.map((dealer) => {
                 const routingConfigured = hasEmail(dealer.lead_email);
                 const extraRoutingCount = countEmailList(dealer.routing_cc_emails);
-                const dealerBillingReady = hasEmail(dealer.billing_contact_email);
+                const dealerBillingReady = hasEmail(dealer.billing_email);
                 const dealerStripeLinked = Boolean(dealer.stripe_customer_id || dealer.stripe_subscription_id);
 
                 return (
@@ -1065,7 +1081,7 @@ export default function AdminDealersPage() {
                       />
                       <MiniField
                         label="Billing contact"
-                        value={dealer.billing_contact_email || dealer.billing_contact_name || "Not set"}
+                        value={dealer.billing_email || dealer.billing_contact_name || "Not set"}
                       />
                       <MiniField
                         label="Stripe customer"
@@ -1073,7 +1089,7 @@ export default function AdminDealersPage() {
                       />
                       <MiniField
                         label="Subscription"
-                        value={dealer.stripe_subscription_status || "Not configured"}
+                        value={dealer.billing_status || "Not configured"}
                       />
                     </div>
 
