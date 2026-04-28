@@ -1,6 +1,7 @@
 "use client";
 
 import TradeDesk from "../components/TradeDesk";
+import type { CSSProperties } from "react";
 
 export default function Page() {
   return (
@@ -12,6 +13,20 @@ export default function Page() {
         fontFamily: "Arial, Helvetica, sans-serif",
       }}
     >
+      <style>{`
+        @media (max-width: 980px) {
+          .hero-vehicle-art { display: none !important; }
+          .dealer-advantage-grid { grid-template-columns: 1fr !important; }
+          .dealer-clarity-grid { grid-template-columns: 1fr !important; }
+          .dealer-signup-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 620px) {
+          .top-nav { gap: 10px !important; font-size: 12px !important; }
+          .dealer-name { font-size: 12px !important; }
+          .vehicle-scan-section { padding-left: 10px !important; padding-right: 10px !important; }
+        }
+      `}</style>
+
       <div
         style={{
           background: "#0b0b0b",
@@ -39,8 +54,10 @@ export default function Page() {
           zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: 14 }}>Jersey Village Chrysler Jeep Dodge Ram</strong>
-        <nav style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
+        <strong className="dealer-name" style={{ fontSize: 14 }}>
+          Jersey Village Chrysler Jeep Dodge Ram
+        </strong>
+        <nav className="top-nav" style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
           <span>New</span>
           <span>Used</span>
           <span>Service</span>
@@ -52,13 +69,29 @@ export default function Page() {
         style={{
           position: "relative",
           overflow: "hidden",
-          padding: "30px 18px 14px",
+          padding: "30px 18px 18px",
           background:
             "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.13), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%)",
           textAlign: "center",
         }}
       >
-        <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+        <div className="hero-vehicle-art" style={{ ...heroVehicleArt, left: 24 }}>
+          <img src="/images/jeep_01.png" alt="Baja-style Jeep on sand dunes" style={heroVehicleImage} />
+          <div style={vehicleArtOverlay}>
+            <strong>Adventure buyers</strong>
+            <span>Trade equity captured while intent is high.</span>
+          </div>
+        </div>
+
+        <div className="hero-vehicle-art" style={{ ...heroVehicleArt, right: 24 }}>
+          <img src="/images/ram_truck_01.png" alt="Lifted Ram truck on a mountain dirt road" style={heroVehicleImage} />
+          <div style={vehicleArtOverlay}>
+            <strong>Truck shoppers</strong>
+            <span>Real photos, VIN, mileage, and offer flow.</span>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 1040, margin: "0 auto", position: "relative", zIndex: 2 }}>
           <div
             style={{
               display: "inline-flex",
@@ -164,14 +197,10 @@ export default function Page() {
 
       <section
         id="vehicle-scan"
+        className="vehicle-scan-section"
         style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px 32px" }}
       >
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: 14,
-          }}
-        >
+        <div style={{ textAlign: "center", marginBottom: 14 }}>
           <div
             style={{
               display: "inline-flex",
@@ -240,14 +269,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: 12,
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 8,
-          }}
-        >
+        <div className="dealer-clarity-grid" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
           <div style={dealerClarityCard}>
             <strong style={dealerClarityTitle}>Live on your site</strong>
             <span style={dealerClarityBody}>The app sits inside your trade page.</span>
@@ -279,8 +301,9 @@ export default function Page() {
 
       <section style={{ padding: "24px 18px 38px" }}>
         <div
+          className="dealer-advantage-grid"
           style={{
-            maxWidth: 900,
+            maxWidth: 1060,
             margin: "0 auto",
             display: "grid",
             gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -288,29 +311,13 @@ export default function Page() {
           }}
         >
           {[
-            ["No waiting", "Scan the vehicle and get a real answer immediately."],
-            ["No games", "The offer is based on the actual vehicle evidence — not a generic form."],
-            ["Your choice", "Trade it, sell it, or talk with the dealership after you see the number."],
+            ["More complete leads", "Customers submit photos, VIN, mileage, and intent before your team invests time chasing the deal."],
+            ["Faster appraisal path", "The offer flow turns a cold trade form into a guided vehicle scan your desk can actually use."],
+            ["Cleaner customer experience", "The buyer gets an answer immediately, with no gimmicks, and your dealership keeps final inspection control."],
           ].map(([title, body]) => (
-            <div
-              key={title}
-              style={{
-                padding: 17,
-                borderRadius: 21,
-                background: "white",
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
-              }}
-            >
+            <div key={title} style={advantageCard}>
               <strong style={{ display: "block", fontSize: 16 }}>{title}</strong>
-              <p
-                style={{
-                  margin: "7px 0 0",
-                  color: "#64748b",
-                  fontSize: 14,
-                  lineHeight: 1.45,
-                }}
-              >
+              <p style={{ margin: "7px 0 0", color: "#64748b", fontSize: 14, lineHeight: 1.45 }}>
                 {body}
               </p>
             </div>
@@ -326,6 +333,7 @@ export default function Page() {
         }}
       >
         <div
+          className="dealer-signup-grid"
           style={{
             maxWidth: 900,
             margin: "0 auto",
@@ -369,7 +377,7 @@ export default function Page() {
                 letterSpacing: "-0.055em",
               }}
             >
-              Enhance your trade process with real trades.
+              Turn your trade page into a real intake engine.
             </h2>
 
             <p
@@ -381,20 +389,13 @@ export default function Page() {
                 fontWeight: 700,
               }}
             >
-              Customers submit vehicles you can actually work — not guesses, not incomplete forms.
+              TradeDesk gives your dealership a branded scan flow, structured vehicle evidence, and a faster path from customer interest to workable offer.
             </p>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                marginTop: 18,
-              }}
-            >
-              <span style={darkPill}>Live on your site</span>
-              <span style={darkPill}>Structured trades</span>
-              <span style={darkPill}>Dealer-ready</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
+              <span style={darkPill}>Website-ready</span>
+              <span style={darkPill}>Evidence-based</span>
+              <span style={darkPill}>Dealer-controlled</span>
             </div>
           </div>
 
@@ -425,28 +426,13 @@ export default function Page() {
               Live
             </div>
 
-            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>
-              Dealer Access
-            </h3>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Dealer Access</h3>
 
-            <p
-              style={{
-                margin: "6px 0 16px",
-                color: "#64748b",
-                fontSize: 13,
-                lineHeight: 1.45,
-                maxWidth: 300,
-              }}
-            >
+            <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45, maxWidth: 300 }}>
               Complete setup and subscription to begin onboarding.
             </p>
 
-            <a
-              href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200"
-              target="_blank"
-              rel="noreferrer"
-              style={primaryBtn}
-            >
+            <a href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200" target="_blank" rel="noreferrer" style={primaryBtn}>
               <span>Start Subscription</span>
               <span>$595/mo</span>
             </a>
@@ -484,14 +470,7 @@ export default function Page() {
               </a>
             </div>
 
-            <p
-              style={{
-                fontSize: 12,
-                color: "#64748b",
-                margin: "14px 0 0",
-                lineHeight: 1.45,
-              }}
-            >
+            <p style={{ fontSize: 12, color: "#64748b", margin: "14px 0 0", lineHeight: 1.45 }}>
               Setup fee is waived for dealers who start a monthly subscription before July 1.
             </p>
           </div>
@@ -514,14 +493,53 @@ export default function Page() {
   );
 }
 
-const heroPill: React.CSSProperties = {
+const heroVehicleArt: CSSProperties = {
+  position: "absolute",
+  top: 24,
+  width: "min(25vw, 360px)",
+  minWidth: 250,
+  height: 300,
+  borderRadius: 34,
+  overflow: "hidden",
+  background: "#0f172a",
+  border: "1px solid rgba(15,23,42,0.08)",
+  boxShadow: "0 30px 80px rgba(15,23,42,0.16)",
+  transform: "translateY(6px)",
+};
+
+const heroVehicleImage: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const vehicleArtOverlay: CSSProperties = {
+  position: "absolute",
+  left: 14,
+  right: 14,
+  bottom: 14,
+  padding: "12px 13px",
+  borderRadius: 18,
+  background: "rgba(15,23,42,0.78)",
+  color: "white",
+  backdropFilter: "blur(12px)",
+  textAlign: "left",
+  display: "grid",
+  gap: 3,
+  fontSize: 12,
+  lineHeight: 1.25,
+  boxShadow: "0 16px 34px rgba(0,0,0,0.26)",
+};
+
+const heroPill: CSSProperties = {
   padding: "7px 10px",
   borderRadius: 999,
   background: "white",
   border: "1px solid #e2e8f0",
 };
 
-const dealerClarityCard: React.CSSProperties = {
+const dealerClarityCard: CSSProperties = {
   padding: "12px 13px",
   borderRadius: 17,
   background: "white",
@@ -529,7 +547,7 @@ const dealerClarityCard: React.CSSProperties = {
   boxShadow: "0 12px 28px rgba(15,23,42,0.05)",
 };
 
-const dealerClarityTitle: React.CSSProperties = {
+const dealerClarityTitle: CSSProperties = {
   display: "block",
   color: "#0f172a",
   fontSize: 13,
@@ -537,7 +555,7 @@ const dealerClarityTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
-const dealerClarityBody: React.CSSProperties = {
+const dealerClarityBody: CSSProperties = {
   display: "block",
   color: "#64748b",
   fontSize: 12,
@@ -545,7 +563,15 @@ const dealerClarityBody: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const darkPill: React.CSSProperties = {
+const advantageCard: CSSProperties = {
+  padding: 18,
+  borderRadius: 21,
+  background: "white",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
+};
+
+const darkPill: CSSProperties = {
   padding: "8px 11px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.09)",
@@ -555,7 +581,7 @@ const darkPill: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const primaryBtn: React.CSSProperties = {
+const primaryBtn: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -572,7 +598,7 @@ const primaryBtn: React.CSSProperties = {
   boxShadow: "0 14px 30px rgba(22,163,74,0.26)",
 };
 
-const secondaryBtn: React.CSSProperties = {
+const secondaryBtn: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
