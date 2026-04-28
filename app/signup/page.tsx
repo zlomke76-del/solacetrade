@@ -7,6 +7,7 @@ type SignupForm = {
   legalName: string;
   dealerWebsite: string;
   managerEmail: string;
+  crmEmail: string;
   routingCcEmails: string;
   billingContactName: string;
   billingEmail: string;
@@ -23,6 +24,7 @@ const initialForm: SignupForm = {
   legalName: "",
   dealerWebsite: "",
   managerEmail: "",
+  crmEmail: "",
   routingCcEmails: "",
   billingContactName: "",
   billingEmail: "",
@@ -59,6 +61,15 @@ function labelStyle(): React.CSSProperties {
     color: "#334155",
     fontSize: 12,
     fontWeight: 900,
+  };
+}
+
+function helperStyle(): React.CSSProperties {
+  return {
+    color: muted,
+    fontSize: 11,
+    fontWeight: 700,
+    lineHeight: 1.35,
   };
 }
 
@@ -175,7 +186,7 @@ export default function SignupPage() {
             <div style={{ display: "grid", gap: 10, marginTop: 22 }}>
               {[
                 ["$595 / month", "Monthly platform access"],
-                ["$299 setup fee", "Waived for dealers who subscribe before July 1"],
+                ["$299 setup fee", "WAIVED until July 1"],
                 ["Automatic install email", "Customer link, internal link, button snippet, and iframe snippet"],
               ].map(([title, body]) => (
                 <div
@@ -208,7 +219,7 @@ export default function SignupPage() {
           >
             <h2 style={{ margin: 0, fontSize: 24, letterSpacing: "-0.03em" }}>Dealer setup</h2>
             <p style={{ margin: "6px 0 16px", color: muted, fontSize: 14, lineHeight: 1.5 }}>
-              These details create your dealer page, manager routing, billing record, and post-payment install instructions.
+              These details create your dealer page, manager routing, CRM delivery, billing record, and post-payment install instructions.
             </p>
 
             <div style={{ display: "grid", gap: 11 }}>
@@ -274,6 +285,23 @@ export default function SignupPage() {
                   placeholder="manager@dealer.com"
                   style={inputStyle()}
                 />
+                <span style={helperStyle()}>
+                  Oversight contact for trade packets and manager review.
+                </span>
+              </label>
+
+              <label style={labelStyle()}>
+                Primary lead / CRM intake email
+                <input
+                  type="email"
+                  value={form.crmEmail}
+                  onChange={(event) => updateField("crmEmail", event.target.value)}
+                  placeholder="internet@dealer.com or leads@crm.com"
+                  style={inputStyle()}
+                />
+                <span style={helperStyle()}>
+                  Where new trade opportunities should be delivered. Leave blank to use the manager email.
+                </span>
               </label>
 
               <label style={labelStyle()}>
@@ -351,6 +379,22 @@ export default function SignupPage() {
               </div>
             </div>
 
+            <div
+              style={{
+                marginTop: 14,
+                padding: 12,
+                borderRadius: 16,
+                background: "#ecfdf5",
+                color: "#065f46",
+                fontSize: 13,
+                fontWeight: 900,
+                lineHeight: 1.4,
+                border: "1px solid #bbf7d0",
+              }}
+            >
+              Setup fee waived — no upfront setup cost if you start before July 1.
+            </div>
+
             {error ? (
               <div style={{ marginTop: 13, padding: 12, borderRadius: 16, background: "#fef2f2", color: "#991b1b", fontSize: 13, fontWeight: 800 }}>
                 {error}
@@ -375,7 +419,7 @@ export default function SignupPage() {
                 boxShadow: "0 18px 42px rgba(185,28,28,0.24)",
               }}
             >
-              {submitting ? "Starting checkout..." : "Continue to secure checkout"}
+              {submitting ? "Starting checkout..." : "Finish setup & activate"}
             </button>
 
             <p style={{ margin: "12px 0 0", color: muted, fontSize: 12, lineHeight: 1.45 }}>
