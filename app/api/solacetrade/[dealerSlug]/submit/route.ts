@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { buildDealerFollowupEmail } from "@/lib/email";
 import {
   cleanText,
   createSignedPhotoUrls,
@@ -607,6 +608,38 @@ export async function POST(
         resendEnabled: Boolean(process.env.RESEND_API_KEY),
       },
     });
+
+    const followupKey = `DF-${crypto.randomUUID()}`;
+    const followupDueAt = new Date(Date.now() + 120000).toISOString();
+    const dealerFollowupEmail = buildDealerFollowupEmail({
+      dealerName: dealer.name,
+      dealerLeadEmail: dealer.lead_email,
+      customerEmail: customerContact,
+      customerName,
+      vehicleLabel: vehicleLabel || "your vehicle",
+      offerAmount: typeof offerAmount === "number" ? offerAmount : null,
+      offerCurrency: intake.offer_currency || valuePayload.offerCurrency || "USD",
+      locale: valuePayload.locale || undefined,
+      customerIntent: intentLabel,
+    });
+
+    await logTradeEvent({
+      dealerId: dealer.id,
+      intakeId: intake.id,
+      eventType: "dealer_followup_pending",
+      payload: {
+        followupKey,
+        dueAt: followupDueAt,
+        delaySeconds: 120,
+        cancelIfDealerTouchesLead: true,
+        sourceEvent: "certificate_sent",
+        certificateId,
+        customerIntent: intentLabel,
+        email: dealerFollowupEmail,
+        resendEnabled: Boolean(process.env.RESEND_API_KEY),
+      },
+    });
+
 
     return NextResponse.json({
       ok: true,
