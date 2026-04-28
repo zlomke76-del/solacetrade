@@ -262,7 +262,7 @@ function formatIntakeError(errorBody: IntakeErrorBody) {
   }
 
   return [
-    errorBody.error || "All five guided vehicle photos are required.",
+    errorBody.error || "All five vehicle scan photos are required.",
     `Missing: ${errorBody.missingPhotoSteps.join(", ")}.`,
     errorBody.receivedPhotoSteps?.length
       ? `Received: ${errorBody.receivedPhotoSteps.join(", ")}.`
@@ -382,7 +382,7 @@ export default function TradeDesk({
 
     if (!scanComplete) {
       setErrorMessage(
-        `Finish the five guided photos first. Next needed: ${nextMissing}.`
+        `Finish the vehicle scan first. Next needed: ${nextMissing}.`
       );
       return;
     }
@@ -627,7 +627,7 @@ export default function TradeDesk({
                 background: isInternal ? "#38bdf8" : red,
               }}
             />
-            {isInternal ? "Manager Packet" : "Guided Vehicle Scan"}
+            {isInternal ? "Manager Packet" : "Instant Offer Scan"}
           </div>
           <strong style={{ fontSize: 12, opacity: 0.86 }}>
             {capturedCount}/5 photos
@@ -642,7 +642,7 @@ export default function TradeDesk({
             letterSpacing: "-0.045em",
           }}
         >
-          {started ? currentStep.label : "Capture the vehicle first."}
+          {started ? currentStep.label : "Scan your vehicle to get your real offer."}
         </h2>
         <p
           style={{
@@ -654,7 +654,7 @@ export default function TradeDesk({
         >
           {started
             ? currentStep.coaching
-            : "Five guided photos first. Solace reads the VIN and mileage from the scan evidence."}
+            : "Takes about 30 seconds. Solace reads the VIN and mileage from the scan evidence."}
         </p>
 
         <div
@@ -764,7 +764,7 @@ export default function TradeDesk({
                 opacity: 0.84,
               }}
             >
-              Tap to capture or upload this view.
+              Tap to scan this view.
             </span>
           </div>
         </button>
@@ -830,8 +830,8 @@ export default function TradeDesk({
             <div>
               <h3 style={{ margin: 0, fontSize: 18 }}>
                 {showDetails
-                  ? "Ready for Solace scan review"
-                  : "Finish the photo sequence"}
+                  ? "Ready to get your real offer"
+                  : "Start the vehicle scan"}
               </h3>
               <p
                 style={{
@@ -842,10 +842,10 @@ export default function TradeDesk({
                 }}
               >
                 {showDetails
-                  ? "Solace will read the VIN and mileage from the photo evidence before asking what you want to do next."
+                  ? "Solace will read the scan evidence and return the offer before asking what you want to do next."
                   : nextMissing
                     ? `Next needed: ${nextMissing}.`
-                    : "Keep going."}
+                    : "Tap Start Scan to begin."}
               </p>
             </div>
             <div
@@ -873,11 +873,10 @@ export default function TradeDesk({
               }}
             >
               <strong style={{ display: "block", fontSize: 13, color: dark }}>
-                Vehicle details from scan evidence
+                Vehicle details from the scan
               </strong>
               <p style={{ margin: "3px 0 0", fontSize: 12, color: muted }}>
-                VIN and mileage are read from the uploaded VIN and odometer
-                photos. They cannot be manually entered.
+                VIN and mileage are read from the VIN and odometer photos.
               </p>
 
               <div
@@ -1029,10 +1028,12 @@ export default function TradeDesk({
                 : canRequestOffer
                   ? isInternal
                     ? "Create Manager Review Packet"
-                    : "Get My Instant Cash Offer"
+                    : "Get My Real Offer"
                   : isInternal && scanComplete && (!customerName.trim() || !dealNumber.trim())
                     ? "Add customer name and deal number"
-                    : `Continue Photo Scan (${captureSteps.length - capturedCount} left)`}
+                    : capturedCount === 0
+                      ? "Start Scan"
+                      : `Continue Scan (${captureSteps.length - capturedCount} left)`}
             </button>
           )}
         </div>
@@ -1352,10 +1353,10 @@ export default function TradeDesk({
                 }}
               >
                 <strong style={{ display: "block", fontSize: 15 }}>
-                  Where should we send your trade certificate?
+                  Where should we send your offer certificate?
                 </strong>
                 <p style={{ margin: "4px 0 10px", color: muted, fontSize: 13 }}>
-                  We’ll send your certificate and verify it with the dealer.
+                  We’ll send your certificate and keep it tied to this vehicle file.
                 </p>
                 <div
                   style={{
@@ -1474,7 +1475,7 @@ export default function TradeDesk({
                   ? "Route to Used Car Manager"
                   : "Add customer, deal #, and manager email"
                 : canSubmitVehicleFile
-                  ? "Get my trade certificate"
+                  ? "Send my offer certificate"
                   : "Add name, email, and next step"}
             </button>
 
