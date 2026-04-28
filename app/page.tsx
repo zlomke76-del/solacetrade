@@ -52,7 +52,7 @@ export default function Page() {
         style={{
           position: "relative",
           overflow: "hidden",
-          padding: "34px 18px 16px",
+          padding: "30px 18px 14px",
           background:
             "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.13), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%)",
           textAlign: "center",
@@ -104,7 +104,7 @@ export default function Page() {
 
           <p
             style={{
-              margin: "0 auto 16px",
+              margin: "0 auto 14px",
               color: "#64748b",
               fontSize: 14,
               fontWeight: 600,
@@ -164,9 +164,117 @@ export default function Page() {
 
       <section
         id="vehicle-scan"
-        style={{ maxWidth: 690, margin: "0 auto", padding: "0 14px 32px" }}
+        style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px 32px" }}
       >
-        <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              color: "#334155",
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            This is what the dealer gets
+          </div>
+
+          <h2
+            style={{
+              margin: "0 auto 6px",
+              color: "#0f172a",
+              fontSize: "clamp(22px, 3vw, 30px)",
+              lineHeight: 1.08,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            A live trade capture app for your website.
+          </h2>
+
+          <p
+            style={{
+              margin: "0 auto",
+              maxWidth: 620,
+              color: "#475569",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.45,
+            }}
+          >
+            Customers scan their vehicle, receive a real offer response, and your team gets a ready-to-work deal backed by real vehicle data.
+          </p>
+        </div>
+
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 30,
+            border: "2px solid #b91c1c",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
+            boxShadow: "0 28px 80px rgba(15,23,42,0.16)",
+          }}
+        >
+          <div
+            style={{
+              borderRadius: 24,
+              border: "1px solid #e2e8f0",
+              overflow: "hidden",
+              background: "white",
+            }}
+          >
+            <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 8,
+          }}
+        >
+          <div style={dealerClarityCard}>
+            <strong style={dealerClarityTitle}>Live on your site</strong>
+            <span style={dealerClarityBody}>The app sits inside your trade page.</span>
+          </div>
+          <div style={dealerClarityCard}>
+            <strong style={dealerClarityTitle}>Better vehicle intake</strong>
+            <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
+          </div>
+          <div style={dealerClarityCard}>
+            <strong style={dealerClarityTitle}>Ready-to-work deals</strong>
+            <span style={dealerClarityBody}>Your team starts with real vehicle data.</span>
+          </div>
+        </div>
+
+        <p
+          style={{
+            margin: "12px auto 0",
+            maxWidth: 620,
+            textAlign: "center",
+            color: "#475569",
+            fontSize: 13,
+            fontWeight: 800,
+            lineHeight: 1.45,
+          }}
+        >
+          Enhances antiquated trade practices with real vehicle data — without forcing the dealer to give up control of the deal.
+        </p>
       </section>
 
       <section style={{ padding: "24px 18px 38px" }}>
@@ -261,7 +369,7 @@ export default function Page() {
                 letterSpacing: "-0.055em",
               }}
             >
-              Replace your trade form with real trades.
+              Enhance your trade process with real trades.
             </h2>
 
             <p
@@ -411,6 +519,30 @@ const heroPill: React.CSSProperties = {
   borderRadius: 999,
   background: "white",
   border: "1px solid #e2e8f0",
+};
+
+const dealerClarityCard: React.CSSProperties = {
+  padding: "12px 13px",
+  borderRadius: 17,
+  background: "white",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 12px 28px rgba(15,23,42,0.05)",
+};
+
+const dealerClarityTitle: React.CSSProperties = {
+  display: "block",
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 900,
+  marginBottom: 4,
+};
+
+const dealerClarityBody: React.CSSProperties = {
+  display: "block",
+  color: "#64748b",
+  fontSize: 12,
+  lineHeight: 1.35,
+  fontWeight: 700,
 };
 
 const darkPill: React.CSSProperties = {
