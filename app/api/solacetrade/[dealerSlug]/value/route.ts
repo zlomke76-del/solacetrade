@@ -562,6 +562,29 @@ function normalizeDetectedMileage(input: {
   };
 }
 
+function isUsDealerWithLikelyCanadianMarketVehicle(input: {
+  dealerCountry: string;
+  sourceMileage: number | null;
+  sourceMileageUnit: DistanceUnit;
+}) {
+  return (
+    input.dealerCountry.toUpperCase() === "US" &&
+    Boolean(input.sourceMileage) &&
+    input.sourceMileageUnit === "km"
+  );
+}
+
+function applyCrossBorderMarketAdjustment(input: {
+  amount: number | null | undefined;
+  shouldAdjust: boolean;
+}) {
+  if (!input.amount || !Number.isFinite(input.amount)) return null;
+
+  if (!input.shouldAdjust) return Math.round(input.amount);
+
+  return Math.round(input.amount * 0.92);
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -730,6 +753,8 @@ Dealer market context:
 Rules:
 - Offer numbers must be in ${marketContext.currency}; do not output USD for Canadian dealers unless the dealer currency is USD.
 - Adjust valuation reasoning for the dealer's local market. Alaska, Texas, Canada, and other regions should not be treated as the same market.
+- US dealers must use US market pricing in USD. Canadian dealers must use Canadian market pricing in CAD unless the dealer record explicitly says otherwise.
+- If the dealer is in the US and the odometer is visibly in kilometers, treat this as a likely Canadian-market unit and apply a conservative US resale friction adjustment. Do not assume full US market parity.
 - detectedMileage should be the odometer number as read from the image.
 - detectedMileageUnit must be "mi" or "km". If the image unit is unreadable, use the dealer preferred unit: ${marketContext.distanceUnit}.
 - If VIN is not visible, detectedVin must be null.
@@ -851,6 +876,13 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     const sourceMileage = mileageState.sourceMileage;
     const sourceMileageUnit = mileageState.sourceMileageUnit;
     const mileageUnit = mileageState.displayMileageUnit;
+    const dealerCountry = marketContext.country.toUpperCase();
+    const crossBorderAdjusted = isUsDealerWithLikelyCanadianMarketVehicle({
+      dealerCountry,
+      sourceMileage,
+      sourceMileageUnit,
+    });
+    const crossBorderAdjustmentRate = crossBorderAdjusted ? 0.92 : 1;
 
     const decodedVehicle = detectedVin
       ? await decodeVehicleFromVin(detectedVin)
@@ -948,11 +980,30 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       );
     }
 
+    if (crossBorderAdjusted) {
+      dealerReviewNotes.push(
+        "Likely Canadian-market unit detected from kilometer odometer. Offer adjusted for US resale friction."
+      );
+    }
+
     if (inspectionRequired) {
       dealerReviewNotes.push(
         "Visual condition requires dealer inspection before finalizing the offer."
       );
     }
+
+    const adjustedOfferAmount = applyCrossBorderMarketAdjustment({
+      amount: parsed.offerAmount,
+      shouldAdjust: crossBorderAdjusted,
+    });
+    const adjustedOfferRangeLow = applyCrossBorderMarketAdjustment({
+      amount: parsed.offerRangeLow,
+      shouldAdjust: crossBorderAdjusted,
+    });
+    const adjustedOfferRangeHigh = applyCrossBorderMarketAdjustment({
+      amount: parsed.offerRangeHigh,
+      shouldAdjust: crossBorderAdjusted,
+    });
 
     const missingItems = getCleanStringArray(parsed.missingItems);
     const executionAdmissibility = buildExecutionAdmissibility({
@@ -960,7 +1011,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       photoCount: photos.length,
       detectedVin,
       detectedMileage,
-      offerAmount: parsed.offerAmount,
+      offerAmount: adjustedOfferAmount,
       confidence: parsed.confidence,
       admissibility: parsed.admissibility,
       missingItems,
@@ -977,6 +1028,19 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     const valuePayload = {
       ...parsed,
       marketContext,
+      marketAdjustment: {
+        crossBorderAdjusted,
+        reason: crossBorderAdjusted
+          ? "Likely Canadian-market vehicle submitted to a US dealer; kilometer odometer detected."
+          : null,
+        multiplier: crossBorderAdjustmentRate,
+        dealerCountry,
+        sourceMileageUnit,
+        dealerMileageUnit: mileageUnit,
+      },
+      offerAmount: adjustedOfferAmount,
+      offerRangeLow: adjustedOfferRangeLow,
+      offerRangeHigh: adjustedOfferRangeHigh,
       detectedVin: detectedVin || null,
       detectedMileage,
       detectedMileageUnit: mileageUnit,
@@ -1040,12 +1104,18 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         signals: vehicleSignals,
       },
       title:
-        parsed.title ||
-        `Instant cash offer: ${formatMoney(
-          parsed.offerAmount,
-          marketContext.currency,
-          marketContext.locale
-        )}`,
+        crossBorderAdjusted && adjustedOfferAmount
+          ? `Instant cash offer: ${formatMoney(
+              adjustedOfferAmount,
+              marketContext.currency,
+              marketContext.locale
+            )}`
+          : parsed.title ||
+            `Instant cash offer: ${formatMoney(
+              adjustedOfferAmount,
+              marketContext.currency,
+              marketContext.locale
+            )}`,
     };
 
     const updatePayload = {
@@ -1084,6 +1154,13 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       payload: {
         model: getModel(),
         marketContext,
+        marketAdjustment: {
+          crossBorderAdjusted,
+          multiplier: crossBorderAdjustmentRate,
+          dealerCountry,
+          sourceMileageUnit,
+          dealerMileageUnit: mileageUnit,
+        },
         hasDetectedVin: Boolean(detectedVin),
         hasDetectedMileage: Boolean(detectedMileage),
         mileage: {
