@@ -28,6 +28,10 @@ type TradeDeskProps = {
   brandColor?: string;
   managerEmail?: string;
   routingCcEmails?: string[];
+  currency?: OfferCurrency;
+  locale?: string;
+  distanceUnit?: DistanceUnit;
+  valuationMarket?: string;
 };
 
 type CaptureStep = {
@@ -151,33 +155,43 @@ const captureSteps: CaptureStep[] = [
 const dark = "#0f172a";
 const muted = "#64748b";
 
-function getValueCurrency(value: SolaceValue | null): OfferCurrency {
-  return value?.marketContext?.currency || value?.offerCurrency || "USD";
+function getValueCurrency(value: SolaceValue | null, fallbackCurrency: OfferCurrency = "USD"): OfferCurrency {
+  return value?.marketContext?.currency || value?.offerCurrency || fallbackCurrency;
 }
 
-function getValueLocale(value: SolaceValue | null) {
-  return value?.marketContext?.locale || value?.locale || (getValueCurrency(value) === "CAD" ? "en-CA" : "en-US");
+function getValueLocale(
+  value: SolaceValue | null,
+  fallbackLocale?: string,
+  fallbackCurrency: OfferCurrency = "USD"
+) {
+  const currency = getValueCurrency(value, fallbackCurrency);
+  return value?.marketContext?.locale || value?.locale || fallbackLocale || (currency === "CAD" ? "en-CA" : "en-US");
 }
 
-function getValueMileageUnit(value: SolaceValue | null): DistanceUnit {
+function getValueMileageUnit(value: SolaceValue | null, fallbackUnit: DistanceUnit = "mi"): DistanceUnit {
   return (
     value?.marketContext?.distanceUnit ||
     value?.detectedMileageUnit ||
     value?.mileageUnit ||
     value?.vehicle?.mileageUnit ||
-    "mi"
+    fallbackUnit
   );
 }
 
-function getValueMarket(value: SolaceValue | null) {
-  return value?.marketContext?.valuationMarket || value?.valuationMarket || "";
+function getValueMarket(value: SolaceValue | null, fallbackMarket = "") {
+  return value?.marketContext?.valuationMarket || value?.valuationMarket || fallbackMarket;
 }
 
-function formatMoney(value: number | null | undefined, solaceValue?: SolaceValue | null) {
+function formatMoney(
+  value: number | null | undefined,
+  solaceValue?: SolaceValue | null,
+  fallbackCurrency: OfferCurrency = "USD",
+  fallbackLocale?: string
+) {
   if (!value) return "Pending dealer review";
 
-  const currency = getValueCurrency(solaceValue || null);
-  const locale = getValueLocale(solaceValue || null);
+  const currency = getValueCurrency(solaceValue || null, fallbackCurrency);
+  const locale = getValueLocale(solaceValue || null, fallbackLocale, fallbackCurrency);
 
   return new Intl.NumberFormat(locale, {
     style: "currency",
@@ -330,6 +344,10 @@ export default function TradeDesk({
   brandColor = "#b91c1c",
   managerEmail = "",
   routingCcEmails = [],
+  currency = "USD",
+  locale,
+  distanceUnit = "mi",
+  valuationMarket = "",
 }: TradeDeskProps) {
   const isInternal = mode === "internal";
   const red = brandColor || "#b91c1c";
@@ -353,16 +371,24 @@ export default function TradeDesk({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
+  const displayCurrency = getValueCurrency(value, currency);
+  const displayLocale = getValueLocale(value, locale, displayCurrency);
+  const detectedMileageUnit = getValueMileageUnit(value, distanceUnit);
+  const detectedMarket = getValueMarket(value, valuationMarket);
+  const currentStepLabel = currentStep.key === "odometer"
+    ? `${currentStep.label} (${detectedMileageUnit})`
+    : currentStep.label;
+  const currentStepHelp = currentStep.key === "odometer"
+    ? `Capture the odometer clearly in ${detectedMileageUnit}.`
+    : currentStep.help;
   const capturedCount = Object.values(photos).filter(Boolean).length;
   const photoProgress = Math.round((capturedCount / captureSteps.length) * 100);
   const scanComplete = captureSteps.every((step) => photos[step.key]);
   const showDetails = scanComplete;
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
-  const detectedMileageUnit = getValueMileageUnit(value);
-  const detectedLocale = getValueLocale(value);
-  const detectedCurrency = getValueCurrency(value);
-  const detectedMarket = getValueMarket(value);
+  const detectedLocale = displayLocale;
+  const detectedCurrency = displayCurrency;
   const detectedVehicle = getValueVehicle(value);
   const detectedVehicleLabel = getValueVehicleLabel(value);
   const canRequestOffer = isInternal
@@ -697,7 +723,7 @@ export default function TradeDesk({
             letterSpacing: "-0.045em",
           }}
         >
-          {started ? currentStep.label : "Scan your vehicle to get your real offer."}
+          {started ? currentStepLabel : "Scan your vehicle to get your real offer."}
         </h2>
         <p
           style={{
@@ -809,7 +835,7 @@ export default function TradeDesk({
             }}
           >
             <strong style={{ display: "block", fontSize: 14 }}>
-              {currentStep.help}
+              {currentStepHelp}
             </strong>
             <span
               style={{
@@ -1173,7 +1199,7 @@ export default function TradeDesk({
               {isInternal
                 ? "Used Car Manager Review Packet"
                 : value.title ||
-                  `Instant cash offer: ${formatMoney(value.offerAmount, value)}`}
+                  `Instant cash offer: ${formatMoney(value.offerAmount, value, displayCurrency, detectedLocale)}`}
             </strong>
 
             <div
@@ -1197,7 +1223,7 @@ export default function TradeDesk({
                 >
                   <strong>Offer</strong>
                   <br />
-                  {formatMoney(value.offerAmount, value)}
+                  {formatMoney(value.offerAmount, value, displayCurrency, detectedLocale)}
                 </span>
               )}
               {isInternal && (
@@ -1250,7 +1276,7 @@ export default function TradeDesk({
               >
                 <strong>Market</strong>
                 <br />
-                {getValueCurrency(value)} / {getValueMileageUnit(value)}
+                {displayCurrency} / {detectedMileageUnit}
               </span>
               <span
                 style={{
