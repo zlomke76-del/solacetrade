@@ -87,7 +87,7 @@ export default function Page() {
               letterSpacing: "-0.058em",
             }}
           >
-            Get a cleaner trade value.
+            Real offer in seconds. No games.
           </h1>
 
           <p
@@ -99,7 +99,7 @@ export default function Page() {
               fontWeight: 700,
             }}
           >
-            Scan your vehicle. Get an instant cash offer.
+            Based on your actual vehicle — not a guess.
           </p>
 
           <p
@@ -110,7 +110,7 @@ export default function Page() {
               fontWeight: 600,
             }}
           >
-            No obligation. No pressure.
+            Trade it or sell it. Your choice.
           </p>
 
           <a
@@ -129,8 +129,19 @@ export default function Page() {
               boxShadow: "0 18px 42px rgba(185,28,28,0.24)",
             }}
           >
-            Start Vehicle Scan
+            Get My Real Offer
           </a>
+
+          <p
+            style={{
+              margin: "10px auto 0",
+              color: "#64748b",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            Final value confirmed upon inspection.
+          </p>
 
           <div
             style={{
@@ -145,8 +156,8 @@ export default function Page() {
             }}
           >
             <span style={heroPill}>5 guided photos</span>
-            <span style={heroPill}>VIN after scan</span>
-            <span style={heroPill}>Recall-ready review</span>
+            <span style={heroPill}>VIN captured</span>
+            <span style={heroPill}>Real condition signals</span>
           </div>
         </div>
       </section>
@@ -169,9 +180,9 @@ export default function Page() {
           }}
         >
           {[
-            ["Guided capture", "Customers follow a clean, step-by-step photo flow."],
-            ["Cleaner values", "VIN and mileage come after verified image capture."],
-            ["Dealer-ready", "Every trade becomes a structured acquisition packet."],
+            ["Less chasing", "Stop calling customers just to figure out what the car is."],
+            ["Better first calls", "Know the vehicle before you ever pick up the phone."],
+            ["More real deals", "Work actual trades instead of incomplete leads."],
           ].map(([title, body]) => (
             <div
               key={title}
@@ -250,7 +261,7 @@ export default function Page() {
                 letterSpacing: "-0.055em",
               }}
             >
-              Start acquiring better trades.
+              Replace your trade form with real trades.
             </h2>
 
             <p
@@ -262,8 +273,7 @@ export default function Page() {
                 fontWeight: 700,
               }}
             >
-              SolaceTrade turns trade-in intake into a guided acquisition flow:
-              photo capture, VIN context, manager routing, and dealer-ready review.
+              Customers submit vehicles you can actually work — not guesses, not incomplete forms.
             </p>
 
             <div
@@ -274,9 +284,9 @@ export default function Page() {
                 marginTop: 18,
               }}
             >
-              <span style={darkPill}>Dealer onboarding</span>
-              <span style={darkPill}>Manager routing</span>
-              <span style={darkPill}>Monthly platform access</span>
+              <span style={darkPill}>Live on your site</span>
+              <span style={darkPill}>Structured trades</span>
+              <span style={darkPill}>Dealer-ready</span>
             </div>
           </div>
 
