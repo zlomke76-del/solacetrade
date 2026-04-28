@@ -19,7 +19,7 @@ export default function Page() {
           .hero-copy-wrap { max-width: 620px !important; }
           .hero-title { font-size: clamp(34px, 4.8vw, 50px) !important; line-height: 0.98 !important; }
         }
-         (max-width: 1120px) {
+        @media (max-width: 1120px) {
           .hero-vehicle-art { width: 210px !important; height: 220px !important; }
           .hero-copy-wrap { max-width: 560px !important; }
           .hero-title { font-size: clamp(30px, 4.4vw, 44px) !important; letter-spacing: -0.048em !important; }
@@ -92,7 +92,7 @@ export default function Page() {
       >
         <div className="hero-vehicle-art" style={{ ...heroVehicleArt, left: 24 }}>
           <img src="/images/jeep_01.png" alt="Baja-style Jeep on sand dunes" style={heroVehicleImage} />
-          <div className="inventory-top-badge" style={inventoryTopBadge}>
+          <div style={inventoryTopBadge}>
             <strong style={inventoryTopTitle}>New Jeep Inventory</strong>
             <span style={inventoryTopAction}>View all</span>
           </div>
@@ -104,7 +104,7 @@ export default function Page() {
 
         <div className="hero-vehicle-art" style={{ ...heroVehicleArt, right: 24 }}>
           <img src="/images/ram_truck_01.png" alt="Lifted Ram truck on a mountain dirt road" style={heroVehicleImage} />
-          <div className="inventory-top-badge" style={inventoryTopBadge}>
+          <div style={inventoryTopBadge}>
             <strong style={inventoryTopTitle}>New Ram Inventory</strong>
             <span style={inventoryTopAction}>View all</span>
           </div>
@@ -115,24 +115,7 @@ export default function Page() {
         </div>
 
         <div className="hero-copy-wrap" style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "7px 12px",
-              borderRadius: 999,
-              background: "#fee2e2",
-              color: "#991b1b",
-              fontSize: 11,
-              fontWeight: 900,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              marginBottom: 12,
-            }}
-          >
-            TradeDesk by Solace
-          </div>
+          <div style={eyebrowRed}>TradeDesk by Solace</div>
 
           <h1
             className="hero-title"
@@ -147,122 +130,37 @@ export default function Page() {
             Real offer in seconds. No games.
           </h1>
 
-          <p
-            style={{
-              margin: "0 auto 6px",
-              maxWidth: 620,
-              color: "#0f172a",
-              fontSize: "clamp(16px, 2.2vw, 20px)",
-              fontWeight: 700,
-            }}
-          >
+          <p style={{ margin: "0 auto 6px", maxWidth: 620, color: "#0f172a", fontSize: "clamp(16px, 2.2vw, 20px)", fontWeight: 700 }}>
             Built from your actual vehicle — not a guess.
           </p>
 
-          <p
-            style={{
-              margin: "0 auto 14px",
-              color: "#64748b",
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-          >
+          <p style={{ margin: "0 auto 14px", color: "#64748b", fontSize: 14, fontWeight: 600 }}>
             Scan your car. See your offer instantly.
           </p>
 
-          <a
-            href="#vehicle-scan"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "14px 21px",
-              borderRadius: 16,
-              background: "#b91c1c",
-              color: "white",
-              fontSize: 15,
-              fontWeight: 900,
-              textDecoration: "none",
-              boxShadow: "0 18px 42px rgba(185,28,28,0.24)",
-            }}
-          >
+          <a href="#vehicle-scan" style={heroCta}>
             Get My Real Offer
           </a>
 
-          <p
-            style={{
-              margin: "10px auto 0",
-              color: "#64748b",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
+          <p style={{ margin: "10px auto 0", color: "#64748b", fontSize: 12, fontWeight: 700 }}>
             Final value confirmed upon inspection.
           </p>
 
-          <p
-            style={{
-              margin: "14px auto 0",
-              color: "#334155",
-              fontSize: 12,
-              fontWeight: 900,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-            }}
-          >
+          <p style={{ margin: "14px auto 0", color: "#334155", fontSize: 12, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase" }}>
             Trade value first. Inventory next. One clean path.
           </p>
         </div>
       </section>
 
-      <section
-        id="vehicle-scan"
-        className="vehicle-scan-section"
-        style={{ maxWidth: 1160, margin: "0 auto", padding: "0 14px 34px" }}
-      >
+      <section id="vehicle-scan" className="vehicle-scan-section" style={{ maxWidth: 1160, margin: "0 auto", padding: "0 14px 34px" }}>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "7px 12px",
-              borderRadius: 999,
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              color: "#334155",
-              fontSize: 12,
-              fontWeight: 900,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            This is what the dealer gets
-          </div>
+          <div style={dealerGetsBadge}>This is what the dealer gets</div>
 
-          <h2
-            style={{
-              margin: "0 auto 6px",
-              color: "#0f172a",
-              fontSize: "clamp(22px, 3vw, 30px)",
-              lineHeight: 1.08,
-              letterSpacing: "-0.04em",
-            }}
-          >
+          <h2 style={{ margin: "0 auto 6px", color: "#0f172a", fontSize: "clamp(22px, 3vw, 30px)", lineHeight: 1.08, letterSpacing: "-0.04em" }}>
             From scan to desk — one clean flow.
           </h2>
 
-          <p
-            style={{
-              margin: "0 auto",
-              maxWidth: 680,
-              color: "#475569",
-              fontSize: 14,
-              fontWeight: 700,
-              lineHeight: 1.45,
-            }}
-          >
+          <p style={{ margin: "0 auto", maxWidth: 680, color: "#475569", fontSize: 14, fontWeight: 700, lineHeight: 1.45 }}>
             Customers scan their vehicle, receive a real offer response, and your team gets a manager-ready review packet backed by real vehicle data.
           </p>
         </div>
@@ -270,164 +168,84 @@ export default function Page() {
         <div style={tradeFlowShell}>
           <div className="trade-flow-grid" style={tradeFlowGrid}>
             <div className="scan-card-wrap" style={scanColumn}>
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 30,
-                border: "2px solid #b91c1c",
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
-                boxShadow: "0 28px 80px rgba(15,23,42,0.16)",
-              }}
-            >
-              <div
-                style={{
-                  borderRadius: 24,
-                  border: "1px solid #e2e8f0",
-                  overflow: "hidden",
-                  background: "white",
-                }}
-              >
-                <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+              <div style={scanOuterCard}>
+                <div style={scanInnerCard}>
+                  <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+                </div>
+              </div>
+
+              <div style={dealerPacketBar}>
+                <div className="dealer-packet-header" style={dealerPacketHeader}>
+                  <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
+                  <strong className="dealer-packet-title" style={dealerPacketTitle}>
+                    Everything your team needs to work the deal faster.
+                  </strong>
+                </div>
+
+                <div className="dealer-clarity-grid" style={dealerPacketGrid}>
+                  <div style={dealerPacketItem}>
+                    <span style={dealerPacketIcon}>01</span>
+                    <strong style={dealerClarityTitle}>Live on your site</strong>
+                    <span style={dealerClarityBody}>Trade capture stays branded to the dealership.</span>
+                  </div>
+                  <div style={dealerPacketItem}>
+                    <span style={dealerPacketIcon}>02</span>
+                    <strong style={dealerClarityTitle}>Real vehicle evidence</strong>
+                    <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
+                  </div>
+                  <div style={dealerPacketItem}>
+                    <span style={dealerPacketIcon}>03</span>
+                    <strong style={dealerClarityTitle}>Immediate next step</strong>
+                    <span style={dealerClarityBody}>Customer gets a clean answer while your desk keeps final inspection control.</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-        <div style={dealerPacketBar}>
-          <div className="dealer-packet-header" style={dealerPacketHeader}>
-            <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
-            <strong className="dealer-packet-title" style={dealerPacketTitle}>
-              Everything your team needs to work the deal faster.
-            </strong>
-          </div>
-
-          <div className="dealer-clarity-grid" style={dealerPacketGrid}>
-            <div style={dealerPacketItem}>
-              <span style={dealerPacketIcon}>01</span>
-              <strong style={dealerClarityTitle}>Live on your site</strong>
-              <span style={dealerClarityBody}>Trade capture stays branded to the dealership.</span>
-            </div>
-            <div style={dealerPacketItem}>
-              <span style={dealerPacketIcon}>02</span>
-              <strong style={dealerClarityTitle}>Real vehicle evidence</strong>
-              <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
-            </div>
-            <div style={dealerPacketItem}>
-              <span style={dealerPacketIcon}>03</span>
-              <strong style={dealerClarityTitle}>Immediate next step</strong>
-              <span style={dealerClarityBody}>Customer gets a clean answer while your desk keeps final inspection control.</span>
-            </div>
-          </div>
-        </div>
-
-          </div>
-
-          <aside className="manager-review-card" style={managerReviewCard}>
-            <div style={managerReviewTopline}>
-              <span style={managerReviewBadge}>Step 2</span>
-              <span style={managerReviewStatus}>Manager packet</span>
-            </div>
-
-            <h3 style={managerReviewTitle}>Manager review — ready instantly.</h3>
-            <p style={managerReviewCopy}>
-              Ready for your desk the moment the scan is complete.
-            </p>
-
-            <div style={managerImageShell}>
-              <img
-                src="/images/manager_review_01.png"
-                alt="Manager review packet screen"
-                style={managerReviewImage}
-              />
-            </div>
-
-            <div style={managerBullets}>
-              <div style={managerBulletItem}>
-                <span style={managerBulletCheck}>✓</span>
-                <span>VIN, mileage, and photos pre-filled</span>
+            <aside className="manager-review-card" style={managerReviewCard}>
+              <div style={managerReviewTopline}>
+                <span style={managerReviewBadge}>Step 2</span>
+                <span style={managerReviewStatus}>Manager packet</span>
               </div>
-              <div style={managerBulletItem}>
-                <span style={managerBulletCheck}>✓</span>
-                <span>Trim and options decoded</span>
+
+              <h3 style={managerReviewTitle}>Manager review — ready instantly.</h3>
+              <p style={managerReviewCopy}>Ready for your desk the moment the scan is complete.</p>
+
+              <div style={managerImageShell}>
+                <img src="/images/manager_review_01.png" alt="Manager review packet screen" style={managerReviewImage} />
               </div>
-              <div style={managerBulletItem}>
-                <span style={managerBulletCheck}>✓</span>
-                <span>Delivered to your manager workflow</span>
+
+              <div style={managerBullets}>
+                <div style={managerBulletItem}>
+                  <span style={managerBulletCheck}>✓</span>
+                  <span>VIN, mileage, and photos pre-filled</span>
+                </div>
+                <div style={managerBulletItem}>
+                  <span style={managerBulletCheck}>✓</span>
+                  <span>Trim and options decoded</span>
+                </div>
+                <div style={managerBulletItem}>
+                  <span style={managerBulletCheck}>✓</span>
+                  <span>Delivered to your manager workflow</span>
+                </div>
               </div>
-            </div>
             </aside>
           </div>
 
-          <div className="flow-arrow" style={flowArrow} aria-hidden="true">
-            →
-          </div>
+          <div className="flow-arrow" style={flowArrow} aria-hidden="true">→</div>
         </div>
-
       </section>
 
-      <section
-        style={{
-          padding: "42px 18px",
-          background: "#0f172a",
-          color: "white",
-        }}
-      >
-        <div
-          className="dealer-signup-grid"
-          style={{
-            maxWidth: 900,
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: 20,
-            alignItems: "stretch",
-          }}
-        >
-          <div
-            style={{
-              padding: 24,
-              borderRadius: 22,
-              background: "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))",
-              border: "1px solid rgba(255,255,255,0.12)",
-              boxShadow: "0 24px 70px rgba(0,0,0,0.28)",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-flex",
-                padding: "7px 10px",
-                borderRadius: 999,
-                background: "rgba(34,197,94,0.16)",
-                color: "#bbf7d0",
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: 14,
-              }}
-            >
-              Dealer Signup
-            </div>
+      <section style={{ padding: "42px 18px", background: "#0f172a", color: "white" }}>
+        <div className="dealer-signup-grid" style={dealerSignupGrid}>
+          <div style={dealerSignupCopyCard}>
+            <div style={dealerSignupBadge}>Dealer Signup</div>
 
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "clamp(30px, 4vw, 44px)",
-                lineHeight: 0.96,
-                letterSpacing: "-0.055em",
-              }}
-            >
+            <h2 style={{ margin: 0, fontSize: "clamp(30px, 4vw, 44px)", lineHeight: 0.96, letterSpacing: "-0.055em" }}>
               Turn your trade page into a real intake engine.
             </h2>
 
-            <p
-              style={{
-                margin: "14px 0 0",
-                color: "#dbeafe",
-                fontSize: 15,
-                lineHeight: 1.55,
-                fontWeight: 700,
-              }}
-            >
+            <p style={{ margin: "14px 0 0", color: "#dbeafe", fontSize: 15, lineHeight: 1.55, fontWeight: 700 }}>
               TradeDesk gives your dealership a branded scan flow, structured vehicle evidence, and a faster path from customer interest to workable offer.
             </p>
 
@@ -438,99 +256,173 @@ export default function Page() {
             </div>
           </div>
 
-          <div
-            style={{
-              padding: 24,
-              borderRadius: 22,
-              background: "white",
-              color: "#0f172a",
-              position: "relative",
-              overflow: "hidden",
-              boxShadow: "0 24px 70px rgba(0,0,0,0.26)",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 18,
-                right: 18,
-                padding: "7px 10px",
-                borderRadius: 999,
-                background: "#dcfce7",
-                color: "#166534",
-                fontSize: 11,
-                fontWeight: 900,
-              }}
-            >
-              Live
-            </div>
+          <div style={dealerAccessCard}>
+            <div style={liveBadge}>Live</div>
 
             <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Dealer Access</h3>
 
-            <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45, maxWidth: 300 }}>
-              Complete setup and subscription to begin onboarding.
+            <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45, maxWidth: 330 }}>
+              Fill out the setup form first. We build your dealer record, then send you to secure checkout.
             </p>
 
-            <a href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200" target="_blank" rel="noreferrer" style={primaryBtn}>
-              <span>Start Subscription</span>
+            <a href="/signup" style={primaryBtn}>
+              <span>Start Setup</span>
               <span>$595/mo</span>
             </a>
 
             <div style={{ marginTop: 10 }}>
-              <div
-                style={{
-                  background: "#16a34a",
-                  color: "white",
-                  fontWeight: 900,
-                  fontSize: 11,
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  display: "inline-block",
-                  marginBottom: 8,
-                }}
-              >
-                SETUP FEE WAIVED BEFORE JULY 1
-              </div>
+              <div style={waiverBadge}>$299 SETUP FEE WAIVED BEFORE JULY 1</div>
 
-              <a
-                href="https://buy.stripe.com/5kQ5kE6PNfxo4G97MmcV201"
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  ...secondaryBtn,
-                  background: "#f1f5f9",
-                  color: "#64748b",
-                  textDecoration: "line-through",
-                  cursor: "not-allowed",
-                  opacity: 0.7,
-                }}
-              >
-                Pay Setup Fee — $299
-              </a>
+              <div aria-disabled="true" style={disabledSetupFeeBox}>
+                <span>Setup Fee — $299</span>
+                <span>Waived</span>
+              </div>
             </div>
 
             <p style={{ fontSize: 12, color: "#64748b", margin: "14px 0 0", lineHeight: 1.45 }}>
-              Setup fee is waived for dealers who start a monthly subscription before July 1.
+              Dealers complete setup first. The $299 setup fee is waived for subscriptions started before July 1.
             </p>
           </div>
         </div>
       </section>
 
-      <footer
-        style={{
-          padding: 22,
-          background: "#0b0b0b",
-          color: "white",
-          textAlign: "center",
-          fontSize: 13,
-          fontWeight: 800,
-        }}
-      >
+      <footer style={{ padding: 22, background: "#0b0b0b", color: "white", textAlign: "center", fontSize: 13, fontWeight: 800 }}>
         Jersey Village CDJR • Powered by TradeDesk by Solace
       </footer>
     </main>
   );
 }
+
+const eyebrowRed: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "7px 12px",
+  borderRadius: 999,
+  background: "#fee2e2",
+  color: "#991b1b",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  marginBottom: 12,
+};
+
+const heroCta: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "14px 21px",
+  borderRadius: 16,
+  background: "#b91c1c",
+  color: "white",
+  fontSize: 15,
+  fontWeight: 900,
+  textDecoration: "none",
+  boxShadow: "0 18px 42px rgba(185,28,28,0.24)",
+};
+
+const dealerGetsBadge: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "7px 12px",
+  borderRadius: 999,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#334155",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  marginBottom: 8,
+};
+
+const scanOuterCard: CSSProperties = {
+  padding: 12,
+  borderRadius: 30,
+  border: "2px solid #b91c1c",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
+  boxShadow: "0 28px 80px rgba(15,23,42,0.16)",
+};
+
+const scanInnerCard: CSSProperties = {
+  borderRadius: 24,
+  border: "1px solid #e2e8f0",
+  overflow: "hidden",
+  background: "white",
+};
+
+const dealerSignupGrid: CSSProperties = {
+  maxWidth: 900,
+  margin: "0 auto",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 20,
+  alignItems: "stretch",
+};
+
+const dealerSignupCopyCard: CSSProperties = {
+  padding: 24,
+  borderRadius: 22,
+  background: "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))",
+  border: "1px solid rgba(255,255,255,0.12)",
+  boxShadow: "0 24px 70px rgba(0,0,0,0.28)",
+};
+
+const dealerSignupBadge: CSSProperties = {
+  display: "inline-flex",
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "rgba(34,197,94,0.16)",
+  color: "#bbf7d0",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  marginBottom: 14,
+};
+
+const dealerAccessCard: CSSProperties = {
+  padding: 24,
+  borderRadius: 22,
+  background: "white",
+  color: "#0f172a",
+  position: "relative",
+  overflow: "hidden",
+  boxShadow: "0 24px 70px rgba(0,0,0,0.26)",
+};
+
+const liveBadge: CSSProperties = {
+  position: "absolute",
+  top: 18,
+  right: 18,
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#166534",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const waiverBadge: CSSProperties = {
+  background: "#16a34a",
+  color: "white",
+  fontWeight: 900,
+  fontSize: 11,
+  padding: "6px 10px",
+  borderRadius: 999,
+  display: "inline-block",
+  marginBottom: 8,
+};
+
+const disabledSetupFeeBox: CSSProperties = {
+  ...secondaryBtn,
+  background: "#f1f5f9",
+  color: "#64748b",
+  cursor: "not-allowed",
+  opacity: 0.82,
+};
 
 const heroVehicleArt: CSSProperties = {
   position: "absolute",
