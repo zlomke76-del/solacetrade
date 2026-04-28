@@ -5,6 +5,7 @@ export const TRADE_SCAN_BUCKET = "trade-scans";
 
 export type DistanceUnit = "mi" | "km";
 export type OfferCurrency = "USD" | "CAD";
+export type VinConfidence = "Low" | "Medium" | "High" | null;
 
 export type DealerRecord = {
   id: string;
@@ -61,6 +62,8 @@ export type SolaceValuePayload = {
   dealerReviewNotes: string[];
   marketContext?: MarketContext;
   detectedVin?: string | null;
+  detectedVinConfidence?: VinConfidence;
+  vinConfidence?: VinConfidence;
   detectedMileage?: string | number | null;
   detectedMileageUnit?: DistanceUnit | null;
   vin?: string | null;
@@ -68,6 +71,7 @@ export type SolaceValuePayload = {
   mileageUnit?: DistanceUnit | null;
   vehicle?: {
     vin?: string | null;
+    vinConfidence?: VinConfidence;
     mileage?: string | number | null;
     mileageUnit?: DistanceUnit | null;
   } | null;
@@ -83,6 +87,36 @@ export function cleanVin(value: unknown) {
     .toUpperCase()
     .replace(/[^A-HJ-NPR-Z0-9]/g, "")
     .slice(0, 17);
+}
+
+function normalizeVinConfidence(value: unknown): VinConfidence {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "high") return "High";
+  if (text === "medium" || text === "med") return "Medium";
+  if (text === "low") return "Low";
+
+  return null;
+}
+
+function extractVinFromRawText(rawText: string) {
+  const normalized = String(rawText || "").toUpperCase();
+  const strictMatch = normalized.match(/[A-HJ-NPR-Z0-9]{17}/);
+
+  if (strictMatch) {
+    return cleanVin(strictMatch[0]) || null;
+  }
+
+  const labeledMatch = normalized.match(
+    /VIN[^A-HJ-NPR-Z0-9]{0,12}([A-HJ-NPR-Z0-9][\s\-.]*){17}/
+  );
+
+  if (!labeledMatch) {
+    return null;
+  }
+
+  const vin = cleanVin(labeledMatch[0].replace(/^VIN/i, ""));
+  return vin.length === 17 ? vin : null;
 }
 
 export function cleanMileage(value: unknown) {
@@ -228,6 +262,8 @@ export async function createSignedPhotoUrls(photoPaths: string[]) {
 }
 
 export function parseSolaceValue(rawText: string, marketContext?: MarketContext): SolaceValuePayload {
+  const fallbackVin = extractVinFromRawText(rawText);
+
   try {
     const parsed = JSON.parse(rawText) as Partial<SolaceValuePayload>;
 
@@ -235,7 +271,7 @@ export function parseSolaceValue(rawText: string, marketContext?: MarketContext)
       parsed.detectedMileageUnit || parsed.mileageUnit || parsed.vehicle?.mileageUnit || marketContext?.distanceUnit
     );
 
-    const detectedVin =
+    const structuredVin =
       typeof parsed.detectedVin === "string"
         ? cleanVin(parsed.detectedVin)
         : typeof parsed.vin === "string"
@@ -243,6 +279,13 @@ export function parseSolaceValue(rawText: string, marketContext?: MarketContext)
           : typeof parsed.vehicle?.vin === "string"
             ? cleanVin(parsed.vehicle.vin)
             : null;
+
+    const detectedVin = structuredVin || fallbackVin;
+    const vinConfidence =
+      normalizeVinConfidence(parsed.detectedVinConfidence) ||
+      normalizeVinConfidence(parsed.vinConfidence) ||
+      normalizeVinConfidence(parsed.vehicle?.vinConfidence) ||
+      (structuredVin ? "High" : fallbackVin ? "Medium" : null);
 
     const detectedMileage =
       cleanMileage(parsed.detectedMileage) ||
@@ -276,6 +319,8 @@ export function parseSolaceValue(rawText: string, marketContext?: MarketContext)
         : [],
       marketContext,
       detectedVin: detectedVin || null,
+      detectedVinConfidence: vinConfidence,
+      vinConfidence,
       detectedMileage: detectedMileage || null,
       detectedMileageUnit: mileageUnit,
       vin: detectedVin || null,
@@ -283,6 +328,7 @@ export function parseSolaceValue(rawText: string, marketContext?: MarketContext)
       mileageUnit,
       vehicle: {
         vin: detectedVin || null,
+        vinConfidence,
         mileage: detectedMileage || null,
         mileageUnit,
       },
@@ -303,14 +349,17 @@ export function parseSolaceValue(rawText: string, marketContext?: MarketContext)
       missingItems: [],
       dealerReviewNotes: ["Review the raw LLM output in intake metadata before quoting a final number."],
       marketContext,
-      detectedVin: null,
+      detectedVin: fallbackVin || null,
+      detectedVinConfidence: fallbackVin ? "Medium" : null,
+      vinConfidence: fallbackVin ? "Medium" : null,
       detectedMileage: null,
       detectedMileageUnit: marketContext?.distanceUnit || "mi",
-      vin: null,
+      vin: fallbackVin || null,
       mileage: null,
       mileageUnit: marketContext?.distanceUnit || "mi",
       vehicle: {
-        vin: null,
+        vin: fallbackVin || null,
+        vinConfidence: fallbackVin ? "Medium" : null,
         mileage: null,
         mileageUnit: marketContext?.distanceUnit || "mi",
       },
