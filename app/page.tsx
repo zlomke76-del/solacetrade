@@ -110,7 +110,7 @@ export default function Page() {
               fontWeight: 600,
             }}
           >
-            Trade it or sell it. Your choice.
+            Scan your car. See your offer instantly.
           </p>
 
           <a
@@ -155,9 +155,9 @@ export default function Page() {
               fontWeight: 800,
             }}
           >
-            <span style={heroPill}>5 guided photos</span>
-            <span style={heroPill}>VIN captured</span>
-            <span style={heroPill}>Real condition signals</span>
+            <span style={heroPill}>Fast scan</span>
+            <span style={heroPill}>Real vehicle evidence</span>
+            <span style={heroPill}>Instant offer response</span>
           </div>
         </div>
       </section>
@@ -180,9 +180,9 @@ export default function Page() {
           }}
         >
           {[
-            ["Less chasing", "Stop calling customers just to figure out what the car is."],
-            ["Better first calls", "Know the vehicle before you ever pick up the phone."],
-            ["More real deals", "Work actual trades instead of incomplete leads."],
+            ["No waiting", "Scan the vehicle and get a real answer immediately."],
+            ["No games", "The offer is based on the actual vehicle evidence — not a generic form."],
+            ["Your choice", "Trade it, sell it, or talk with the dealership after you see the number."],
           ].map(([title, body]) => (
             <div
               key={title}
