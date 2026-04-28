@@ -225,7 +225,7 @@ function safeJsonText(text: string) {
 
 function findSignedUrl(
   signedPhotos: Array<{ path: string; signedUrl: string | null }>,
-  stepKey: string
+  stepKey: string,
 ) {
   return (
     signedPhotos.find((photo) => photo.path.includes(`/${stepKey}.`))
@@ -325,7 +325,7 @@ function isValueRelevantOption(option: string) {
 
 function buildStructuredTrim(
   decodedVehicle: DecodedVehicle | null,
-  parsedTrim: string | null
+  parsedTrim: string | null,
 ): StructuredTrim {
   if (decodedVehicle?.trim) {
     return {
@@ -358,8 +358,12 @@ function cleanConditionScore(value: unknown) {
   return Math.min(5, Math.max(1, Math.round(number)));
 }
 
-function normalizeConditionConfidence(value: unknown): VisualConditionConfidence {
-  const text = String(value || "").trim().toLowerCase();
+function normalizeConditionConfidence(
+  value: unknown,
+): VisualConditionConfidence {
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
 
   if (text === "high") return "High";
   if (text === "low") return "Low";
@@ -368,7 +372,9 @@ function normalizeConditionConfidence(value: unknown): VisualConditionConfidence
 }
 
 function normalizeDamageSeverity(value: unknown): DamageFlag["severity"] {
-  const text = String(value || "").trim().toLowerCase();
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
 
   if (text === "minor") return "minor";
   if (text === "moderate") return "moderate";
@@ -411,7 +417,9 @@ function normalizePhotoStepKey(value: unknown): PhotoReviewStepKey | null {
 }
 
 function normalizePhotoReviewStatus(value: unknown): PhotoReviewStepStatus {
-  const text = String(value || "").trim().toUpperCase();
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
 
   if (text === "ACCEPTED") return "ACCEPTED";
   if (text === "REJECTED") return "REJECTED";
@@ -420,7 +428,9 @@ function normalizePhotoReviewStatus(value: unknown): PhotoReviewStepStatus {
 }
 
 function normalizePhotoVehicleMatch(value: unknown): PhotoVehicleMatch {
-  const text = String(value || "").trim().toUpperCase();
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
 
   if (text === "MATCH") return "MATCH";
   if (text === "MISMATCH") return "MISMATCH";
@@ -430,7 +440,9 @@ function normalizePhotoVehicleMatch(value: unknown): PhotoVehicleMatch {
 }
 
 function normalizePhotoImageQuality(value: unknown): PhotoImageQuality {
-  const text = String(value || "").trim().toUpperCase();
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
 
   if (text === "GOOD") return "GOOD";
   if (text === "POOR") return "POOR";
@@ -439,7 +451,9 @@ function normalizePhotoImageQuality(value: unknown): PhotoImageQuality {
 }
 
 function normalizePhotoDamageSeverity(value: unknown): PhotoDamageSeverity {
-  const text = String(value || "").trim().toLowerCase();
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
 
   if (text === "none") return "none";
   if (text === "minor") return "minor";
@@ -449,7 +463,9 @@ function normalizePhotoDamageSeverity(value: unknown): PhotoDamageSeverity {
   return "unknown";
 }
 
-function normalizePhotoDamageChecklist(value: unknown): PhotoDamageChecklistItem[] {
+function normalizePhotoDamageChecklist(
+  value: unknown,
+): PhotoDamageChecklistItem[] {
   if (!Array.isArray(value)) return [];
 
   return value
@@ -495,7 +511,9 @@ function normalizePhotoReview(value: unknown): PhotoReview | null {
       const imageQuality = normalizePhotoImageQuality(rawStep.imageQuality);
       const visiblePanels = getCleanStringArray(rawStep.visiblePanels, 20);
       const inconsistencies = getCleanStringArray(rawStep.inconsistencies, 12);
-      const damageChecklist = normalizePhotoDamageChecklist(rawStep.damageChecklist);
+      const damageChecklist = normalizePhotoDamageChecklist(
+        rawStep.damageChecklist,
+      );
       const usableForCondition = Boolean(rawStep.usableForCondition);
       const retakeRequired =
         Boolean(rawStep.retakeRequired) ||
@@ -542,9 +560,9 @@ function normalizePhotoReview(value: unknown): PhotoReview | null {
 function photoReviewRequiresRetake(photoReview: PhotoReview | null) {
   return Boolean(
     photoReview &&
-      (!photoReview.finalApprovalAllowed ||
-        photoReview.overallStatus === "RETAKE_REQUIRED" ||
-        photoReview.retakeSteps.length > 0)
+    (!photoReview.finalApprovalAllowed ||
+      photoReview.overallStatus === "RETAKE_REQUIRED" ||
+      photoReview.retakeSteps.length > 0),
   );
 }
 
@@ -562,7 +580,73 @@ function photoReviewRetakeSummary(photoReview: PhotoReview | null) {
   });
 }
 
-function flattenPhotoDamageFlags(photoReview: PhotoReview | null): DamageFlag[] {
+function isConflictingPositivePhotoNote(note: string) {
+  const text = note.toLowerCase();
+
+  return (
+    text.includes("all images are clear") ||
+    text.includes("all photos are clear") ||
+    text.includes("all images meet") ||
+    text.includes("all photos meet") ||
+    text.includes("meet requirements") ||
+    text.includes("meets requirements") ||
+    text.includes("photos are acceptable") ||
+    text.includes("images are acceptable") ||
+    text.includes("photo validation passed") ||
+    text.includes("no retake required")
+  );
+}
+
+function isConflictingPositiveConditionNote(note: string) {
+  const text = note.toLowerCase();
+
+  return (
+    text.includes("appears to be in good condition") ||
+    text.includes("appears in good condition") ||
+    text.includes("no visible damage") ||
+    text.includes("no damage detected") ||
+    text.includes("clean condition")
+  );
+}
+
+function sanitizeDealerReviewNotes(
+  notes: string[],
+  photoRetakeRequired: boolean,
+) {
+  const cleaned = notes
+    .map((note) => String(note || "").trim())
+    .filter(Boolean);
+
+  if (!photoRetakeRequired) {
+    return cleaned;
+  }
+
+  return cleaned.filter((note) => !isConflictingPositivePhotoNote(note));
+}
+
+function sanitizeConditionNotes(notes: string[], photoRetakeRequired: boolean) {
+  const cleaned = notes
+    .map((note) => String(note || "").trim())
+    .filter(Boolean);
+
+  if (!photoRetakeRequired) {
+    return cleaned;
+  }
+
+  const filtered = cleaned.filter(
+    (note) => !isConflictingPositiveConditionNote(note),
+  );
+
+  filtered.unshift(
+    "Condition confidence is limited until the required photo retakes are completed.",
+  );
+
+  return Array.from(new Set(filtered));
+}
+
+function flattenPhotoDamageFlags(
+  photoReview: PhotoReview | null,
+): DamageFlag[] {
   if (!photoReview) return [];
 
   return photoReview.steps.flatMap((step) =>
@@ -574,7 +658,7 @@ function flattenPhotoDamageFlags(photoReview: PhotoReview | null): DamageFlag[] 
         severity: item.severity === "none" ? "unknown" : item.severity,
         confidence: item.confidence,
         note: item.note || step.dealerNote,
-      }))
+      })),
   );
 }
 
@@ -588,7 +672,7 @@ function requiresInspection({
   damageFlags: DamageFlag[];
 }) {
   const hasModerateOrMajorDamage = damageFlags.some(
-    (flag) => flag.severity === "moderate" || flag.severity === "major"
+    (flag) => flag.severity === "moderate" || flag.severity === "major",
   );
 
   return (
@@ -650,7 +734,9 @@ function buildExecutionAdmissibility(input: {
   }
 
   if (input.inspectionRequired) {
-    reasons.push("Dealer inspection is required before a certificate can be executed.");
+    reasons.push(
+      "Dealer inspection is required before a certificate can be executed.",
+    );
   }
 
   for (const item of input.missingItems || []) {
@@ -671,7 +757,7 @@ function buildExecutionAdmissibility(input: {
 
 function buildDamageConditionNotes(
   existingNotes: string[] | undefined,
-  damageFlags: DamageFlag[]
+  damageFlags: DamageFlag[],
 ) {
   const notes = Array.isArray(existingNotes) ? [...existingNotes] : [];
 
@@ -685,7 +771,10 @@ function buildDamageConditionNotes(
       .join(" ");
     const note = flag.note ? `${parts ? `${parts}: ` : ""}${flag.note}` : parts;
 
-    if (note && !notes.some((item) => item.toLowerCase() === note.toLowerCase())) {
+    if (
+      note &&
+      !notes.some((item) => item.toLowerCase() === note.toLowerCase())
+    ) {
       notes.push(note);
     }
   }
@@ -693,7 +782,9 @@ function buildDamageConditionNotes(
   return notes;
 }
 
-async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null> {
+async function decodeVehicleFromVin(
+  vin: string,
+): Promise<DecodedVehicle | null> {
   const clean = cleanVin(vin);
 
   if (!clean || clean.length !== 17) return null;
@@ -701,7 +792,7 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
   try {
     const response = await fetch(
       `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${clean}?format=json`,
-      { cache: "no-store" }
+      { cache: "no-store" },
     );
 
     if (!response.ok) return null;
@@ -726,7 +817,7 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
           ? `${result.EngineNumberofCylinders} cyl`
           : null,
       ],
-      " "
+      " ",
     );
     const bodyClass = cleanVehicleText(result.BodyClass);
     const driveType = cleanVehicleText(result.DriveType);
@@ -734,9 +825,7 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
     const doors = cleanVehicleText(result.Doors);
     const transmission = cleanVehicleText(result.TransmissionStyle);
     const trim =
-      cleanVehicleText(result.Trim) ||
-      cleanVehicleText(result.Trim2) ||
-      series;
+      cleanVehicleText(result.Trim) || cleanVehicleText(result.Trim2) || series;
 
     return {
       year: Number.isFinite(year) ? year : null,
@@ -763,7 +852,8 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
   } catch (error) {
     console.error("SolaceTrade VIN decode failed", {
       vin: clean,
-      error: error instanceof Error ? error.message : "Unknown VIN decode error",
+      error:
+        error instanceof Error ? error.message : "Unknown VIN decode error",
     });
 
     return null;
@@ -776,12 +866,18 @@ function normalizeDetectedMileage(input: {
   dealerDistanceUnit: DistanceUnit;
 }) {
   const rawMileage = cleanMileage(input.rawMileage);
-  const rawUnit = normalizeDistanceUnit(input.rawUnit || input.dealerDistanceUnit);
+  const rawUnit = normalizeDistanceUnit(
+    input.rawUnit || input.dealerDistanceUnit,
+  );
 
   return {
     sourceMileage: rawMileage,
     sourceMileageUnit: rawUnit,
-    displayMileage: convertDistance(rawMileage, rawUnit, input.dealerDistanceUnit),
+    displayMileage: convertDistance(
+      rawMileage,
+      rawUnit,
+      input.dealerDistanceUnit,
+    ),
     displayMileageUnit: input.dealerDistanceUnit,
   };
 }
@@ -954,7 +1050,8 @@ Photo manifest: ${JSON.stringify(input.photoManifest)}
     return normalizePhotoReview(parsed.photoReview);
   } catch (error) {
     console.error("SolaceTrade photo review failed", {
-      error: error instanceof Error ? error.message : "Unknown photo review error",
+      error:
+        error instanceof Error ? error.message : "Unknown photo review error",
     });
     return null;
   }
@@ -962,7 +1059,7 @@ Photo manifest: ${JSON.stringify(input.photoManifest)}
 
 export async function POST(
   request: NextRequest,
-  context: { params: { dealerSlug: string } }
+  context: { params: { dealerSlug: string } },
 ) {
   try {
     const apiKey = getGatewayKey();
@@ -970,7 +1067,7 @@ export async function POST(
     if (!apiKey) {
       return NextResponse.json(
         { error: "VERCEL_AI_GATEWAY_API_KEY is not configured." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -983,7 +1080,7 @@ export async function POST(
     if (!intakeId) {
       return NextResponse.json(
         { error: "intakeId is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -991,7 +1088,7 @@ export async function POST(
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
       .select(
-        "id, dealer_id, customer_name, customer_contact, vin, mileage, mileage_unit, mode, manager_notes, photo_paths"
+        "id, dealer_id, customer_name, customer_contact, vin, mileage, mileage_unit, mode, manager_notes, photo_paths",
       )
       .eq("id", intakeId)
       .eq("dealer_id", dealer.id)
@@ -1000,7 +1097,7 @@ export async function POST(
     if (intakeError || !intake) {
       return NextResponse.json(
         { error: intakeError?.message || "Trade intake not found." },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -1024,12 +1121,12 @@ export async function POST(
           error:
             "All five guided vehicle photos are required before Solace can produce an offer.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const signedPhotos = await createSignedPhotoUrls(
-      photos.map((photo) => photo.storage_path)
+      photos.map((photo) => photo.storage_path),
     );
 
     const frontUrl = findSignedUrl(signedPhotos, "front");
@@ -1042,7 +1139,7 @@ export async function POST(
       stepKey: photo.step_key,
       hasSignedUrl: Boolean(
         signedPhotos.find((signed) => signed.path === photo.storage_path)
-          ?.signedUrl
+          ?.signedUrl,
       ),
     }));
 
@@ -1238,10 +1335,10 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       return NextResponse.json(
         {
           error:
-            (gatewayJson as { error?: { message?: string } })?.error
-              ?.message || "AI Gateway value request failed.",
+            (gatewayJson as { error?: { message?: string } })?.error?.message ||
+            "AI Gateway value request failed.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -1266,7 +1363,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     } as ExtendedSolaceValuePayload;
 
     const detectedVin = cleanVin(
-      parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
+      parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin,
     );
 
     const mileageState = normalizeDetectedMileage({
@@ -1301,18 +1398,24 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       : null;
 
     const parsedTrim = cleanVehicleText(
-      parsed.vehicleTrim || parsed.trim || parsed.vehicle?.trim
+      parsed.vehicleTrim || parsed.trim || parsed.vehicle?.trim,
     );
 
     const vehicleYear =
       decodedVehicle?.year ||
-      cleanVehicleText(parsed.vehicleYear || parsed.year || parsed.vehicle?.year);
+      cleanVehicleText(
+        parsed.vehicleYear || parsed.year || parsed.vehicle?.year,
+      );
     const vehicleMake =
       decodedVehicle?.make ||
-      cleanVehicleText(parsed.vehicleMake || parsed.make || parsed.vehicle?.make);
+      cleanVehicleText(
+        parsed.vehicleMake || parsed.make || parsed.vehicle?.make,
+      );
     const vehicleModel =
       decodedVehicle?.model ||
-      cleanVehicleText(parsed.vehicleModel || parsed.model || parsed.vehicle?.model);
+      cleanVehicleText(
+        parsed.vehicleModel || parsed.model || parsed.vehicle?.model,
+      );
     const vehicleTrim = decodedVehicle?.trim || parsedTrim;
     const vehicleTrimDetail = buildStructuredTrim(decodedVehicle, parsedTrim);
     const vehicleBodyClass =
@@ -1332,14 +1435,16 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       cleanVehicleText(parsed.vehicleDoors || parsed.vehicle?.doors);
     const vehicleTransmission =
       decodedVehicle?.transmission ||
-      cleanVehicleText(parsed.vehicleTransmission || parsed.vehicle?.transmission);
+      cleanVehicleText(
+        parsed.vehicleTransmission || parsed.vehicle?.transmission,
+      );
     const vehicleSeries =
       decodedVehicle?.series ||
       cleanVehicleText(parsed.vehicleSeries || parsed.vehicle?.series);
 
-    const optionSignals = uniqueVehicleOptions(parsed.optionSignals || []).filter(
-      isValueRelevantOption
-    );
+    const optionSignals = uniqueVehicleOptions(
+      parsed.optionSignals || [],
+    ).filter(isValueRelevantOption);
 
     const vehicleConfiguration = uniqueVehicleOptions([
       vehicleDriveType,
@@ -1393,7 +1498,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
     ];
     const conditionScore = cleanConditionScore(parsed.conditionScore);
     const baseVisualConditionConfidence = normalizeConditionConfidence(
-      parsed.visualConditionConfidence
+      parsed.visualConditionConfidence,
     );
     const visualConditionConfidence =
       photoRetakeRequired && baseVisualConditionConfidence === "High"
@@ -1407,40 +1512,49 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         visualConditionConfidence,
         damageFlags,
       });
-    const conditionNotes = buildDamageConditionNotes(
-      parsed.conditionNotes,
-      damageFlags
+    const conditionNotes = sanitizeConditionNotes(
+      buildDamageConditionNotes(parsed.conditionNotes, damageFlags),
+      photoRetakeRequired,
     );
-    const dealerReviewNotes = Array.isArray(parsed.dealerReviewNotes)
-      ? [...parsed.dealerReviewNotes]
-      : [];
+    const dealerReviewNotes = sanitizeDealerReviewNotes(
+      Array.isArray(parsed.dealerReviewNotes)
+        ? [...parsed.dealerReviewNotes]
+        : [],
+      photoRetakeRequired,
+    );
 
     dealerReviewNotes.unshift(
-      `Valuation market: ${marketContext.valuationMarket}. Currency: ${marketContext.currency}. Odometer display: ${marketContext.distanceUnit}.`
+      `Valuation market: ${marketContext.valuationMarket}. Currency: ${marketContext.currency}. Odometer display: ${marketContext.distanceUnit}.`,
     );
 
     if (sourceMileage && sourceMileageUnit !== mileageUnit) {
       dealerReviewNotes.push(
-        `Odometer was read as ${sourceMileage} ${sourceMileageUnit} and normalized to ${detectedMileage} ${mileageUnit} for this dealer.`
+        `Odometer was read as ${sourceMileage} ${sourceMileageUnit} and normalized to ${detectedMileage} ${mileageUnit} for this dealer.`,
       );
     }
 
     if (crossBorderAdjusted) {
       dealerReviewNotes.push(
-        "Likely Canadian-market unit detected from kilometer odometer. Offer adjusted for US resale friction."
+        "Likely Canadian-market unit detected from kilometer odometer. Offer adjusted for US resale friction.",
       );
     }
 
     if (inspectionRequired) {
       dealerReviewNotes.push(
-        "Visual condition requires dealer inspection before finalizing the offer."
+        "Visual condition requires dealer inspection before finalizing the offer.",
       );
     }
 
     if (photoRetakeRequired) {
+      const retakeSummary = photoReviewRetakeSummary(photoReview);
+
       dealerReviewNotes.push(
-        `Photo validation requires retake before final approval: ${photoReviewRetakeSummary(photoReview).join(" ")}`
+        "Photo validation failed: one or more required images must be retaken before final approval.",
       );
+
+      if (retakeSummary.length) {
+        dealerReviewNotes.push(`Retake required: ${retakeSummary.join(" ")}`);
+      }
     }
 
     const adjustedOfferAmount = applyCrossBorderMarketAdjustment({
@@ -1470,9 +1584,9 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       photoCount: photos.length,
       detectedVin,
       detectedMileage,
+      offerAmount: adjustedOfferAmount,
       confidence: finalConfidence,
       admissibility: finalAdmissibility,
-      offerAmount: adjustedOfferAmount,
       missingItems,
       inspectionRequired,
       visualConditionConfidence,
@@ -1483,18 +1597,18 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       executionAdmissibility.customerCertificatePermitted = false;
       if (
         !executionAdmissibility.reasons.includes(
-          "One or more required photos must be retaken before final approval."
+          "One or more required photos must be retaken before final approval.",
         )
       ) {
         executionAdmissibility.reasons.push(
-          "One or more required photos must be retaken before final approval."
+          "One or more required photos must be retaken before final approval.",
         );
       }
     }
 
     if (!executionAdmissibility.allowed) {
       dealerReviewNotes.push(
-        `Execution blocked until state is sufficient: ${executionAdmissibility.reasons.join(" ")}`
+        `Execution blocked until state is sufficient: ${executionAdmissibility.reasons.join(" ")}`,
       );
     }
 
@@ -1514,6 +1628,8 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       offerAmount: adjustedOfferAmount,
       offerRangeLow: adjustedOfferRangeLow,
       offerRangeHigh: adjustedOfferRangeHigh,
+      confidence: finalConfidence,
+      admissibility: finalAdmissibility,
       detectedVin: detectedVin || null,
       detectedMileage,
       detectedMileageUnit: mileageUnit,
@@ -1582,13 +1698,13 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           ? `Instant cash offer: ${formatMoney(
               adjustedOfferAmount,
               marketContext.currency,
-              marketContext.locale
+              marketContext.locale,
             )}`
           : parsed.title ||
             `Instant cash offer: ${formatMoney(
               adjustedOfferAmount,
               marketContext.currency,
-              marketContext.locale
+              marketContext.locale,
             )}`,
     };
 
@@ -1660,7 +1776,8 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           damageFlagCount: damageFlags.length,
           photoReviewStatus: photoReview?.overallStatus || null,
           retakeRequired: photoRetakeRequired,
-          retakeSteps: photoReview?.retakeSteps.map((step) => step.stepKey) || [],
+          retakeSteps:
+            photoReview?.retakeSteps.map((step) => step.stepKey) || [],
         },
         executionAdmissibility,
         offerAmount: valuePayload.offerAmount,
