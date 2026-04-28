@@ -85,6 +85,11 @@ function textValue(value: unknown) {
   return String(value || "").trim();
 }
 
+function getDealerTimezone(dealer: unknown) {
+  const value = textValue(asObject(dealer).timezone);
+  return value || "America/Chicago";
+}
+
 function getVehicleLabel(payload: Record<string, unknown>) {
   const vehicle = asObject(payload.vehicle);
 
@@ -156,15 +161,17 @@ function getSummaryLines(payload: Record<string, unknown>, llmSummary: unknown) 
   return [];
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | null | undefined, timezone: string) {
   if (!value) return "Not set";
 
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone || "America/Chicago",
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
   }).format(new Date(value));
 }
 
@@ -245,6 +252,7 @@ export default async function DealerLeadDetailPage({ params }: PageProps) {
   noStore();
 
   const dealer = await getDealerBySlug(params.dealerSlug);
+  const dealerTimezone = getDealerTimezone(dealer);
 
   const { data: intake, error: intakeError } = await supabaseAdmin
     .schema(SOLACETRADE_SCHEMA)
@@ -515,7 +523,7 @@ export default async function DealerLeadDetailPage({ params }: PageProps) {
               <MiniCard label="Admissibility" value={intake.admissibility || textValue(payload.admissibility)} />
               <MiniCard label="Confidence" value={intake.confidence || textValue(payload.confidence)} />
               <MiniCard label="Market" value={intake.valuation_market || textValue(marketContext.valuationMarket)} />
-              <MiniCard label="Created" value={formatDate(intake.created_at)} />
+              <MiniCard label="Created" value={formatDate(intake.created_at, dealerTimezone)} />
             </div>
 
             {vehicleDetails.length ? (
@@ -566,7 +574,7 @@ export default async function DealerLeadDetailPage({ params }: PageProps) {
               <MiniCard label="Customer name" value={customerName} />
               <MiniCard label="Customer contact" value={customerContact} />
               <MiniCard label="Mode" value={intake.mode} />
-              <MiniCard label="Submitted" value={formatDate(intake.submitted_at)} />
+              <MiniCard label="Submitted" value={formatDate(intake.submitted_at, dealerTimezone)} />
             </div>
 
             {intake.manager_notes ? (
@@ -719,7 +727,7 @@ export default async function DealerLeadDetailPage({ params }: PageProps) {
                 >
                   <strong style={{ display: "block" }}>{event.event_type}</strong>
                   <span style={{ display: "block", color: "#64748b", marginTop: 4, fontSize: 12 }}>
-                    {formatDate(event.created_at)}
+                    {formatDate(event.created_at, dealerTimezone)}
                   </span>
                 </div>
               ))
