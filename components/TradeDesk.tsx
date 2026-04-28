@@ -44,6 +44,7 @@ type CaptureStep = {
 };
 
 type PhotoMap = Record<CaptureStep["key"], File | null>;
+type UploadStateMap = Record<CaptureStep["key"], "idle" | "uploading" | "uploaded" | "error">;
 
 type SolaceValue = {
   offerAmount: number | null;
@@ -102,11 +103,23 @@ type SolaceValue = {
   } | null;
 };
 
-type IntakeErrorBody = {
+type ApiErrorBody = {
   error?: string;
   missingPhotoSteps?: string[];
   receivedPhotoSteps?: string[];
   receivedKeys?: string[];
+};
+
+type IntakeResponse = {
+  intakeId: string;
+};
+
+type PhotoUploadResponse = {
+  intakeId: string;
+  stepKey: CaptureStep["key"];
+  storagePath: string;
+  photoCount: number;
+  uploadedSteps: string[];
 };
 
 const captureSteps: CaptureStep[] = [
@@ -223,6 +236,16 @@ function emptyPhotos(): PhotoMap {
   };
 }
 
+function emptyUploadStates(): UploadStateMap {
+  return {
+    front: "idle",
+    driverSide: "idle",
+    rear: "idle",
+    odometer: "idle",
+    vin: "idle",
+  };
+}
+
 function inputStyle(): React.CSSProperties {
   return {
     width: "100%",
@@ -321,13 +344,13 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-function formatIntakeError(errorBody: IntakeErrorBody) {
+function formatApiError(errorBody: ApiErrorBody, fallback = "Something went wrong.") {
   if (!errorBody.missingPhotoSteps?.length) {
-    return errorBody.error || "Could not save vehicle scan.";
+    return errorBody.error || fallback;
   }
 
   return [
-    errorBody.error || "All five vehicle scan photos are required.",
+    errorBody.error || fallback,
     `Missing: ${errorBody.missingPhotoSteps.join(", ")}.`,
     errorBody.receivedPhotoSteps?.length
       ? `Received: ${errorBody.receivedPhotoSteps.join(", ")}.`
@@ -355,6 +378,7 @@ export default function TradeDesk({
   const [started, setStarted] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [photos, setPhotos] = useState<PhotoMap>(() => emptyPhotos());
+  const [uploadStates, setUploadStates] = useState<UploadStateMap>(() => emptyUploadStates());
   const [vin, setVin] = useState("");
   const [mileage, setMileage] = useState("");
   const [contact, setContact] = useState(managerEmail || "");
@@ -366,8 +390,10 @@ export default function TradeDesk({
   const [intakeId, setIntakeId] = useState<string | null>(null);
   const [value, setValue] = useState<SolaceValue | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [creatingIntake, setCreatingIntake] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const intakeIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentStep = captureSteps[stepIndex];
@@ -382,8 +408,10 @@ export default function TradeDesk({
     ? `Capture the odometer clearly in ${detectedMileageUnit}.`
     : currentStep.help;
   const capturedCount = Object.values(photos).filter(Boolean).length;
-  const photoProgress = Math.round((capturedCount / captureSteps.length) * 100);
-  const scanComplete = captureSteps.every((step) => photos[step.key]);
+  const uploadedCount = Object.values(uploadStates).filter((state) => state === "uploaded").length;
+  const uploadInProgress = Object.values(uploadStates).some((state) => state === "uploading");
+  const photoProgress = Math.round((uploadedCount / captureSteps.length) * 100);
+  const scanComplete = captureSteps.every((step) => uploadStates[step.key] === "uploaded");
   const showDetails = scanComplete;
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
@@ -409,51 +437,105 @@ export default function TradeDesk({
 
   const missingPhotoLabels = useMemo(() => {
     return captureSteps
-      .filter((step) => !photos[step.key])
+      .filter((step) => uploadStates[step.key] !== "uploaded")
       .map((step) => step.shortLabel);
-  }, [photos]);
+  }, [uploadStates]);
 
   const nextMissing = missingPhotoLabels[0]
     ? `${missingPhotoLabels[0]} photo`
     : "";
 
   function openCameraOrFilePicker() {
+    if (submitting || creatingIntake || uploadInProgress) return;
+
     setStarted(true);
     window.setTimeout(() => fileInputRef.current?.click(), 0);
   }
 
-  function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
+  async function ensureIntake() {
+    if (intakeIdRef.current) return intakeIdRef.current;
+
+    setCreatingIntake(true);
+    setStatusMessage("Starting vehicle scan...");
+
+    const response = await fetch(`/api/solacetrade/${dealerSlug}/intake`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+
+    const json = (await response.json().catch(() => ({}))) as IntakeResponse & ApiErrorBody;
+
+    if (!response.ok || !json.intakeId) {
+      throw new Error(formatApiError(json, "Could not start vehicle scan."));
+    }
+
+    intakeIdRef.current = json.intakeId;
+    setIntakeId(json.intakeId);
+    return json.intakeId;
+  }
+
+  async function uploadPhoto(stepKey: CaptureStep["key"], file: File) {
+    const nextIntakeId = await ensureIntake();
+    const formData = new FormData();
+
+    formData.append("stepKey", stepKey);
+    formData.append("photo", file, file.name || `${stepKey}.jpg`);
+
+    setUploadStates((previous) => ({ ...previous, [stepKey]: "uploading" }));
+    setStatusMessage(`Uploading ${captureSteps.find((step) => step.key === stepKey)?.shortLabel || "photo"}...`);
+
+    const response = await fetch(
+      `/api/solacetrade/${dealerSlug}/intake/${nextIntakeId}/photo`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const json = (await response.json().catch(() => ({}))) as PhotoUploadResponse & ApiErrorBody;
+
+    if (!response.ok || !json.storagePath) {
+      setUploadStates((previous) => ({ ...previous, [stepKey]: "error" }));
+      throw new Error(formatApiError(json, "Could not upload photo."));
+    }
+
+    setUploadStates((previous) => ({ ...previous, [stepKey]: "uploaded" }));
+    setStatusMessage(
+      json.photoCount >= captureSteps.length
+        ? "Vehicle scan complete. Ready for offer."
+        : `${json.photoCount}/5 photos uploaded. Continue scanning.`
+    );
+  }
+
+  async function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+
     if (!file) return;
 
+    const uploadStep = currentStep;
+
     setStarted(true);
-    setPhotos((previous) => ({ ...previous, [currentStep.key]: file }));
+    setPhotos((previous) => ({ ...previous, [uploadStep.key]: file }));
     setValue(null);
     setCustomerIntent("");
-    setIntakeId(null);
     setErrorMessage("");
     setStatusMessage("");
     setVin("");
     setMileage("");
 
-    if (stepIndex < captureSteps.length - 1) {
-      setStepIndex((index) => index + 1);
-    }
+    try {
+      await uploadPhoto(uploadStep.key, file);
 
-    event.target.value = "";
-  }
-
-  function appendEvidencePhotos(formData: FormData) {
-    for (const step of captureSteps) {
-      const file = photos[step.key];
-
-      if (!file) {
-        throw new Error(`Missing ${step.shortLabel} photo.`);
+      if (stepIndex < captureSteps.length - 1) {
+        setStepIndex((index) => index + 1);
       }
-
-      // Exact backend contract:
-      // front, driverSide, rear, odometer, vin
-      formData.append(step.key, file, file.name || `${step.key}.jpg`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Photo upload failed.");
+      setStatusMessage("");
+    } finally {
+      setCreatingIntake(false);
     }
   }
 
@@ -461,7 +543,7 @@ export default function TradeDesk({
     setErrorMessage("");
     setStatusMessage("");
 
-    if (!scanComplete) {
+    if (!scanComplete || !intakeIdRef.current) {
       setErrorMessage(
         `Finish the vehicle scan first. Next needed: ${nextMissing}.`
       );
@@ -471,45 +553,6 @@ export default function TradeDesk({
     setSubmitting(true);
 
     try {
-      const formData = new FormData();
-
-      formData.append("mode", mode);
-
-      // Do not send manual VIN or mileage. The value route must derive them
-      // from the uploaded VIN and odometer evidence.
-      formData.append("customerName", isInternal ? customerName : "");
-      formData.append("contact", "");
-      formData.append("dealNumber", isInternal ? dealNumber : "");
-      formData.append("salesperson", isInternal ? salesperson : "");
-      formData.append(
-        "managerNotes",
-        isInternal
-          ? [dealNumber ? `Deal #: ${dealNumber}` : "", managerNotes]
-              .filter(Boolean)
-              .join("\n")
-          : ""
-      );
-
-      appendEvidencePhotos(formData);
-
-      setStatusMessage("Saving vehicle scan...");
-      const intakeResponse = await fetch(
-        `/api/solacetrade/${dealerSlug}/intake`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const intakeJson = (await intakeResponse.json().catch(() => ({}))) as
-        | IntakeErrorBody
-        | { intakeId?: string };
-
-      if (!intakeResponse.ok || !("intakeId" in intakeJson) || !intakeJson.intakeId) {
-        throw new Error(formatIntakeError(intakeJson as IntakeErrorBody));
-      }
-
-      setIntakeId(intakeJson.intakeId);
       setStatusMessage(
         isInternal
           ? "Solace is reading the scan evidence and building the manager review packet..."
@@ -521,7 +564,7 @@ export default function TradeDesk({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intakeId: intakeJson.intakeId }),
+          body: JSON.stringify({ intakeId: intakeIdRef.current }),
         }
       );
 
@@ -635,6 +678,7 @@ export default function TradeDesk({
     setStarted(false);
     setStepIndex(0);
     setPhotos(emptyPhotos());
+    setUploadStates(emptyUploadStates());
     setVin("");
     setMileage("");
     setContact(managerEmail || "");
@@ -644,9 +688,11 @@ export default function TradeDesk({
     setManagerNotes("");
     setCustomerIntent("");
     setIntakeId(null);
+    intakeIdRef.current = null;
     setValue(null);
     setStatusMessage("");
     setErrorMessage("");
+    setCreatingIntake(false);
   }
 
   return (
@@ -711,7 +757,7 @@ export default function TradeDesk({
             {isInternal ? "Manager Packet" : "Instant Offer Scan"}
           </div>
           <strong style={{ fontSize: 11, opacity: 0.86 }}>
-            {capturedCount > 0 ? "Building offer…" : "Ready"}
+            {uploadInProgress ? "Uploading..." : capturedCount > 0 ? "Building offer…" : "Ready"}
           </strong>
         </div>
 
@@ -735,7 +781,7 @@ export default function TradeDesk({
         >
           {started
             ? currentStep.coaching
-            : "Takes about 30 seconds. Your offer builds as you scan."}
+            : "Takes about 30 seconds. Each photo uploads as you scan."}
         </p>
 
         <div
@@ -762,6 +808,7 @@ export default function TradeDesk({
       <div style={{ padding: "10px 12px 8px" }}>
         <button
           type="button"
+          disabled={submitting || creatingIntake || uploadInProgress}
           onClick={openCameraOrFilePicker}
           style={{
             position: "relative",
@@ -770,11 +817,12 @@ export default function TradeDesk({
             border: "none",
             borderRadius: 22,
             overflow: "hidden",
-            cursor: "pointer",
+            cursor: submitting || creatingIntake || uploadInProgress ? "wait" : "pointer",
             background: "#020617",
             padding: 0,
             textAlign: "left",
             boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)",
+            opacity: submitting || creatingIntake || uploadInProgress ? 0.78 : 1,
           }}
         >
           <img
@@ -845,7 +893,11 @@ export default function TradeDesk({
                 opacity: 0.84,
               }}
             >
-              Tap to scan this view.
+              {uploadStates[currentStep.key] === "uploading"
+                ? "Uploading this view..."
+                : uploadStates[currentStep.key] === "uploaded"
+                  ? "Uploaded. Tap to replace this view."
+                  : "Tap to scan this view."}
             </span>
           </div>
         </button>
@@ -860,11 +912,16 @@ export default function TradeDesk({
         >
           {captureSteps.map((step, index) => {
             const active = stepIndex === index;
-            const done = Boolean(photos[step.key]);
+            const uploadState = uploadStates[step.key];
+            const done = uploadState === "uploaded";
+            const uploading = uploadState === "uploading";
+            const failed = uploadState === "error";
+
             return (
               <button
                 key={step.key}
                 type="button"
+                disabled={submitting || creatingIntake || uploadInProgress}
                 onClick={() => {
                   setStarted(true);
                   setStepIndex(index);
@@ -875,14 +932,15 @@ export default function TradeDesk({
                   border: active
                     ? `2px solid ${isInternal ? "#0284c7" : red}`
                     : "1px solid #e2e8f0",
-                  background: done ? "#ecfdf5" : "white",
-                  color: done ? "#047857" : dark,
+                  background: done ? "#ecfdf5" : failed ? "#fef2f2" : "white",
+                  color: done ? "#047857" : failed ? "#991b1b" : dark,
                   fontSize: 11,
                   fontWeight: 900,
-                  cursor: "pointer",
+                  cursor: submitting || creatingIntake || uploadInProgress ? "not-allowed" : "pointer",
+                  opacity: uploading ? 0.72 : 1,
                 }}
               >
-                {done ? "✓ " : ""}
+                {uploading ? "…" : done ? "✓ " : failed ? "! " : ""}
                 {step.shortLabel}
               </button>
             );
@@ -926,7 +984,9 @@ export default function TradeDesk({
                   ? "Your scan is complete. Get the offer now."
                   : capturedCount === 0
                     ? "Tap below to begin."
-                    : "Keep scanning — your offer is updating."}
+                    : uploadInProgress
+                      ? "Uploading your current photo."
+                      : "Keep scanning — each photo is saved as you go."}
               </p>
             </div>
             <div
@@ -940,9 +1000,11 @@ export default function TradeDesk({
             >
               {scanComplete
                 ? "Ready"
-                : capturedCount === 0
-                  ? "Start"
-                  : `${captureSteps.length - capturedCount} left`}
+                : uploadInProgress
+                  ? "Saving"
+                  : capturedCount === 0
+                    ? "Start"
+                    : `${captureSteps.length - uploadedCount} left`}
             </div>
           </div>
 
@@ -1097,7 +1159,7 @@ export default function TradeDesk({
           {!value && (
             <button
               type="button"
-              disabled={submitting || !canRequestOffer}
+              disabled={submitting || creatingIntake || uploadInProgress || !canRequestOffer}
               onClick={createIntakeAndValue}
               style={{
                 width: "100%",
@@ -1109,12 +1171,12 @@ export default function TradeDesk({
                 color: "white",
                 fontSize: 15,
                 fontWeight: 900,
-                cursor: submitting
+                cursor: submitting || creatingIntake || uploadInProgress
                   ? "wait"
                   : !canRequestOffer
                     ? "not-allowed"
                     : "pointer",
-                opacity: submitting ? 0.72 : !canRequestOffer ? 0.62 : 1,
+                opacity: submitting || creatingIntake || uploadInProgress ? 0.72 : !canRequestOffer ? 0.62 : 1,
                 boxShadow: isInternal
                   ? "0 16px 32px rgba(15,23,42,0.18)"
                   : "0 16px 32px rgba(185,28,28,0.22)",
@@ -1122,15 +1184,17 @@ export default function TradeDesk({
             >
               {submitting
                 ? "Working..."
-                : canRequestOffer
-                  ? isInternal
-                    ? "Create Manager Review Packet"
-                    : "Get My Real Offer"
-                  : isInternal && scanComplete && (!customerName.trim() || !dealNumber.trim())
-                    ? "Add customer name and deal number"
-                    : capturedCount === 0
-                      ? "Start Scan"
-                      : "Continue Scan"}
+                : creatingIntake || uploadInProgress
+                  ? "Saving photo..."
+                  : canRequestOffer
+                    ? isInternal
+                      ? "Create Manager Review Packet"
+                      : "Get My Real Offer"
+                    : isInternal && scanComplete && (!customerName.trim() || !dealNumber.trim())
+                      ? "Add customer name and deal number"
+                      : capturedCount === 0
+                        ? "Start Scan"
+                        : "Continue Scan"}
             </button>
           )}
         </div>
@@ -1288,7 +1352,7 @@ export default function TradeDesk({
               >
                 <strong>Photos</strong>
                 <br />
-                {capturedCount}/5
+                {uploadedCount}/5
               </span>
             </div>
 
@@ -1412,43 +1476,43 @@ export default function TradeDesk({
                 <strong style={{ display: "block", fontSize: 15, marginBottom: 9 }}>
                   What would you like to do next?
                 </strong>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: 8,
-                }}
-              >
-                {[
-                  ["trade", "Trade it"],
-                  ["sell", "Sell it"],
-                  ["talk", "Talk to someone"],
-                ].map(([intentValue, label]) => (
-                  <button
-                    key={intentValue}
-                    type="button"
-                    onClick={() => setCustomerIntent(intentValue)}
-                    style={{
-                      padding: "11px 8px",
-                      borderRadius: 14,
-                      border:
-                        customerIntent === intentValue
-                          ? `2px solid ${red}`
-                          : "1px solid #cbd5e1",
-                      background:
-                        customerIntent === intentValue ? "#fee2e2" : "white",
-                      color:
-                        customerIntent === intentValue ? "#991b1b" : dark,
-                      fontSize: 12,
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {[
+                    ["trade", "Trade it"],
+                    ["sell", "Sell it"],
+                    ["talk", "Talk to someone"],
+                  ].map(([intentValue, label]) => (
+                    <button
+                      key={intentValue}
+                      type="button"
+                      onClick={() => setCustomerIntent(intentValue)}
+                      style={{
+                        padding: "11px 8px",
+                        borderRadius: 14,
+                        border:
+                          customerIntent === intentValue
+                            ? `2px solid ${red}`
+                            : "1px solid #cbd5e1",
+                        background:
+                          customerIntent === intentValue ? "#fee2e2" : "white",
+                        color:
+                          customerIntent === intentValue ? "#991b1b" : dark,
+                        fontSize: 12,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
             )}
 
             {!isInternal && (
