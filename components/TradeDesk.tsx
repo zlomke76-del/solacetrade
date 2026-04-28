@@ -4,6 +4,23 @@ import { ChangeEvent, useMemo, useRef, useState } from "react";
 
 type TradeDeskMode = "customer" | "internal";
 
+type DistanceUnit = "mi" | "km";
+type OfferCurrency = "USD" | "CAD";
+
+type MarketContext = {
+  country: string;
+  currency: OfferCurrency;
+  locale: string;
+  distanceUnit: DistanceUnit;
+  valuationMarket: string;
+  dealerLocation?: {
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    country: string;
+  };
+};
+
 type TradeDeskProps = {
   dealerSlug: string;
   mode?: TradeDeskMode;
@@ -37,8 +54,14 @@ type SolaceValue = {
   dealerReviewNotes: string[];
   detectedVin?: string | null;
   detectedMileage?: string | number | null;
+  detectedMileageUnit?: DistanceUnit | null;
   vin?: string | null;
   mileage?: string | number | null;
+  mileageUnit?: DistanceUnit | null;
+  offerCurrency?: OfferCurrency;
+  locale?: string;
+  valuationMarket?: string | null;
+  marketContext?: MarketContext;
   vehicleYear?: string | number | null;
   vehicleMake?: string | null;
   vehicleModel?: string | null;
@@ -59,6 +82,7 @@ type SolaceValue = {
   vehicle?: {
     vin?: string | null;
     mileage?: string | number | null;
+    mileageUnit?: DistanceUnit | null;
     year?: string | number | null;
     make?: string | null;
     model?: string | null;
@@ -109,7 +133,7 @@ const captureSteps: CaptureStep[] = [
   {
     key: "odometer",
     label: "Odometer",
-    shortLabel: "Miles",
+    shortLabel: "Odo.",
     help: "Capture the mileage clearly.",
     coaching: "Turn the vehicle on if needed and avoid glare on the dash display.",
     image: "/images/vehicle_scan_04.png",
@@ -127,11 +151,37 @@ const captureSteps: CaptureStep[] = [
 const dark = "#0f172a";
 const muted = "#64748b";
 
-function formatMoney(value: number | null | undefined) {
+function getValueCurrency(value: SolaceValue | null): OfferCurrency {
+  return value?.marketContext?.currency || value?.offerCurrency || "USD";
+}
+
+function getValueLocale(value: SolaceValue | null) {
+  return value?.marketContext?.locale || value?.locale || (getValueCurrency(value) === "CAD" ? "en-CA" : "en-US");
+}
+
+function getValueMileageUnit(value: SolaceValue | null): DistanceUnit {
+  return (
+    value?.marketContext?.distanceUnit ||
+    value?.detectedMileageUnit ||
+    value?.mileageUnit ||
+    value?.vehicle?.mileageUnit ||
+    "mi"
+  );
+}
+
+function getValueMarket(value: SolaceValue | null) {
+  return value?.marketContext?.valuationMarket || value?.valuationMarket || "";
+}
+
+function formatMoney(value: number | null | undefined, solaceValue?: SolaceValue | null) {
   if (!value) return "Pending dealer review";
-  return new Intl.NumberFormat("en-US", {
+
+  const currency = getValueCurrency(solaceValue || null);
+  const locale = getValueLocale(solaceValue || null);
+
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -140,12 +190,13 @@ function cleanMileage(value: string) {
   return Number(value.replace(/[^\d]/g, ""));
 }
 
-function displayMileage(value: string) {
+function displayMileage(value: string, unit: DistanceUnit = "mi", locale = "en-US") {
   const cleaned = cleanMileage(value);
   if (!cleaned) return value;
-  return new Intl.NumberFormat("en-US", {
+
+  return `${new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
-  }).format(cleaned);
+  }).format(cleaned)} ${unit}`;
 }
 
 function emptyPhotos(): PhotoMap {
@@ -308,6 +359,10 @@ export default function TradeDesk({
   const showDetails = scanComplete;
   const detectedVin = vin.trim() || getValueVin(value);
   const detectedMileage = mileage.trim() || getValueMileage(value);
+  const detectedMileageUnit = getValueMileageUnit(value);
+  const detectedLocale = getValueLocale(value);
+  const detectedCurrency = getValueCurrency(value);
+  const detectedMarket = getValueMarket(value);
   const detectedVehicle = getValueVehicle(value);
   const detectedVehicleLabel = getValueVehicleLabel(value);
   const canRequestOffer = isInternal
@@ -915,7 +970,7 @@ export default function TradeDesk({
                   <br />
                   <span style={{ color: detectedMileage ? dark : muted }}>
                     {detectedMileage
-                      ? displayMileage(detectedMileage)
+                      ? displayMileage(detectedMileage, detectedMileageUnit, detectedLocale)
                       : "Will be detected from scan"}
                   </span>
                 </div>
@@ -954,6 +1009,20 @@ export default function TradeDesk({
                     {detectedVehicle.trim ||
                       detectedVehicle.options.slice(0, 3).join(" · ") ||
                       "Will be refined from VIN and visible option signals"}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 13,
+                    background: "#f8fafc",
+                    fontSize: 13,
+                  }}
+                >
+                  <strong>Market</strong>
+                  <br />
+                  <span style={{ color: detectedMarket ? dark : muted }}>
+                    {detectedMarket || `Local ${detectedCurrency} market`}
                   </span>
                 </div>
               </div>
@@ -1104,15 +1173,15 @@ export default function TradeDesk({
               {isInternal
                 ? "Used Car Manager Review Packet"
                 : value.title ||
-                  `Instant cash offer: ${formatMoney(value.offerAmount)}`}
+                  `Instant cash offer: ${formatMoney(value.offerAmount, value)}`}
             </strong>
 
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: isInternal
-                  ? "repeat(4, minmax(0, 1fr))"
-                  : "repeat(3, minmax(0, 1fr))",
+                  ? "repeat(5, minmax(0, 1fr))"
+                  : "repeat(4, minmax(0, 1fr))",
                 gap: 8,
                 marginTop: 12,
               }}
@@ -1128,7 +1197,7 @@ export default function TradeDesk({
                 >
                   <strong>Offer</strong>
                   <br />
-                  {formatMoney(value.offerAmount)}
+                  {formatMoney(value.offerAmount, value)}
                 </span>
               )}
               {isInternal && (
@@ -1170,6 +1239,18 @@ export default function TradeDesk({
                 <strong>State</strong>
                 <br />
                 {value.admissibility}
+              </span>
+              <span
+                style={{
+                  padding: 10,
+                  borderRadius: 13,
+                  background: "#f8fafc",
+                  fontSize: 12,
+                }}
+              >
+                <strong>Market</strong>
+                <br />
+                {getValueCurrency(value)} / {getValueMileageUnit(value)}
               </span>
               <span
                 style={{
