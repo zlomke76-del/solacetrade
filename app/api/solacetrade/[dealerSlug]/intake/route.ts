@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
+  buildMarketContext,
   cleanText,
   getDealerBySlug,
   logTradeEvent,
@@ -79,6 +80,7 @@ export async function POST(
   try {
     const { dealerSlug } = context.params;
     const dealer = await getDealerBySlug(dealerSlug);
+    const marketContext = buildMarketContext(dealer);
     const formData = await request.formData();
 
     const mode =
@@ -138,6 +140,9 @@ export async function POST(
         salesperson: salesperson || null,
         vin: null,
         mileage: null,
+        mileage_unit: marketContext.distanceUnit,
+        offer_currency: marketContext.currency,
+        valuation_market: marketContext.valuationMarket,
         manager_notes: managerNotes || null,
         photo_count: photoEntries.length,
       })
@@ -215,6 +220,7 @@ export async function POST(
         photoCount: uploadedPaths.length,
         mode,
         evidenceOnly: true,
+        marketContext,
         hasManualVin: false,
         hasManualMileage: false,
         receivedPhotoSteps,
