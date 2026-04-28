@@ -16,7 +16,6 @@ export default function Page() {
       <style>{`
         @media (max-width: 980px) {
           .hero-vehicle-art { display: none !important; }
-          .dealer-advantage-grid { grid-template-columns: 1fr !important; }
           .dealer-clarity-grid { grid-template-columns: 1fr !important; }
           .dealer-signup-grid { grid-template-columns: 1fr !important; }
         }
@@ -273,59 +272,29 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="dealer-clarity-grid" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-          <div style={dealerClarityCard}>
-            <strong style={dealerClarityTitle}>Live on your site</strong>
-            <span style={dealerClarityBody}>The app sits inside your trade page.</span>
+        <div style={dealerPacketBar}>
+          <div style={dealerPacketHeader}>
+            <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
+            <strong style={dealerPacketTitle}>Everything your team needs to work the deal faster.</strong>
           </div>
-          <div style={dealerClarityCard}>
-            <strong style={dealerClarityTitle}>Better vehicle intake</strong>
-            <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
-          </div>
-          <div style={dealerClarityCard}>
-            <strong style={dealerClarityTitle}>Ready-to-work deals</strong>
-            <span style={dealerClarityBody}>Your team starts with real vehicle data.</span>
-          </div>
-        </div>
 
-        <p
-          style={{
-            margin: "12px auto 0",
-            maxWidth: 620,
-            textAlign: "center",
-            color: "#475569",
-            fontSize: 13,
-            fontWeight: 800,
-            lineHeight: 1.45,
-          }}
-        >
-          Enhances antiquated trade practices with real vehicle data — without forcing the dealer to give up control of the deal.
-        </p>
-      </section>
-
-      <section style={{ padding: "24px 18px 38px" }}>
-        <div
-          className="dealer-advantage-grid"
-          style={{
-            maxWidth: 1060,
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 12,
-          }}
-        >
-          {[
-            ["More complete leads", "Customers submit photos, VIN, mileage, and intent before your team invests time chasing the deal."],
-            ["Faster appraisal path", "The offer flow turns a cold trade form into a guided vehicle scan your desk can actually use."],
-            ["Cleaner customer experience", "The buyer gets an answer immediately, with no gimmicks, and your dealership keeps final inspection control."],
-          ].map(([title, body]) => (
-            <div key={title} style={advantageCard}>
-              <strong style={{ display: "block", fontSize: 16 }}>{title}</strong>
-              <p style={{ margin: "7px 0 0", color: "#64748b", fontSize: 14, lineHeight: 1.45 }}>
-                {body}
-              </p>
+          <div className="dealer-clarity-grid" style={dealerPacketGrid}>
+            <div style={dealerPacketItem}>
+              <span style={dealerPacketIcon}>01</span>
+              <strong style={dealerClarityTitle}>Live on your site</strong>
+              <span style={dealerClarityBody}>Trade capture stays branded to the dealership.</span>
             </div>
-          ))}
+            <div style={dealerPacketItem}>
+              <span style={dealerPacketIcon}>02</span>
+              <strong style={dealerClarityTitle}>Real vehicle evidence</strong>
+              <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
+            </div>
+            <div style={dealerPacketItem}>
+              <span style={dealerPacketIcon}>03</span>
+              <strong style={dealerClarityTitle}>Immediate next step</strong>
+              <span style={dealerClarityBody}>Customer gets a clean answer while your desk keeps final inspection control.</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -578,12 +547,71 @@ const heroPill: CSSProperties = {
   border: "1px solid #e2e8f0",
 };
 
-const dealerClarityCard: CSSProperties = {
-  padding: "12px 13px",
-  borderRadius: 17,
+const dealerPacketBar: CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 24,
   background: "white",
   border: "1px solid #e2e8f0",
-  boxShadow: "0 12px 28px rgba(15,23,42,0.05)",
+  boxShadow: "0 18px 46px rgba(15,23,42,0.07)",
+};
+
+const dealerPacketHeader: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "2px 2px 12px",
+  borderBottom: "1px solid #e2e8f0",
+};
+
+const dealerPacketEyebrow: CSSProperties = {
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#fee2e2",
+  color: "#991b1b",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
+
+const dealerPacketTitle: CSSProperties = {
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 950,
+  textAlign: "right",
+  lineHeight: 1.25,
+};
+
+const dealerPacketGrid: CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const dealerPacketItem: CSSProperties = {
+  display: "grid",
+  gap: 5,
+  padding: "12px 13px",
+  borderRadius: 17,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+};
+
+const dealerPacketIcon: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 10,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#0f172a",
+  color: "white",
+  fontSize: 11,
+  fontWeight: 950,
 };
 
 const dealerClarityTitle: CSSProperties = {
@@ -600,14 +628,6 @@ const dealerClarityBody: CSSProperties = {
   fontSize: 12,
   lineHeight: 1.35,
   fontWeight: 700,
-};
-
-const advantageCard: CSSProperties = {
-  padding: 18,
-  borderRadius: 21,
-  background: "white",
-  border: "1px solid #e2e8f0",
-  boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
 };
 
 const darkPill: CSSProperties = {
