@@ -9,6 +9,10 @@ import {
   normalizeDistanceUnit,
 } from "@/lib/solacetrade";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 type RouteContext = {
   params: {
     dealerSlug: string;
@@ -52,28 +56,12 @@ function asObject(value: unknown): Record<string, unknown> {
 function getVehicleLabel(payload: Record<string, unknown>) {
   const vehicle = asObject(payload.vehicle);
 
-  const year =
-    payload.vehicleYear ||
-    payload.year ||
-    vehicle.year ||
-    null;
-  const make =
-    payload.vehicleMake ||
-    payload.make ||
-    vehicle.make ||
-    null;
-  const model =
-    payload.vehicleModel ||
-    payload.model ||
-    vehicle.model ||
-    null;
-  const trim =
-    payload.vehicleTrim ||
-    payload.trim ||
-    vehicle.trim ||
-    null;
-
-  return [year, make, model, trim]
+  return [
+    payload.vehicleYear || payload.year || vehicle.year,
+    payload.vehicleMake || payload.make || vehicle.make,
+    payload.vehicleModel || payload.model || vehicle.model,
+    payload.vehicleTrim || payload.trim || vehicle.trim,
+  ]
     .map((part) => String(part || "").trim())
     .filter(Boolean)
     .join(" ")
@@ -83,10 +71,7 @@ function getVehicleLabel(payload: Record<string, unknown>) {
 
 function formatLead(row: TradeLeadRow) {
   const payload = asObject(row.value_payload);
-  const currency = normalizeCurrency(
-    row.offer_currency || payload.offerCurrency,
-    undefined
-  );
+  const currency = normalizeCurrency(row.offer_currency || payload.offerCurrency);
   const unit = normalizeDistanceUnit(row.mileage_unit || payload.mileageUnit);
   const market = String(
     row.valuation_market ||
@@ -100,8 +85,12 @@ function formatLead(row: TradeLeadRow) {
     status: row.status,
     mode: row.mode,
     customer: {
-      name: row.customer_name,
-      contact: row.customer_contact,
+      name: row.customer_name || "New opportunity",
+      contact:
+        row.customer_email ||
+        row.customer_phone ||
+        row.customer_contact ||
+        "Customer info pending",
       email: row.customer_email,
       phone: row.customer_phone,
       intent: row.customer_intent,
@@ -151,10 +140,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const status = searchParams.get("status")?.trim();
     const query = searchParams.get("q")?.trim();
-    const limitParam = Number(searchParams.get("limit") || "50");
+    const limitParam = Number(searchParams.get("limit") || "100");
     const limit = Number.isFinite(limitParam)
-      ? Math.min(Math.max(Math.round(limitParam), 1), 100)
-      : 50;
+      ? Math.min(Math.max(Math.round(limitParam), 1), 250)
+      : 100;
 
     let builder = supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
@@ -217,15 +206,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const rows = data || [];
 
-    return NextResponse.json({
-      dealer: {
-        id: dealer.id,
-        slug: dealer.slug,
-        name: dealer.name,
+    return NextResponse.json(
+      {
+        dealer: {
+          id: dealer.id,
+          slug: dealer.slug,
+          name: dealer.name,
+        },
+        count: rows.length,
+        leads: rows.map(formatLead),
       },
-      count: rows.length,
-      leads: rows.map(formatLead),
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown leads lookup error.";
