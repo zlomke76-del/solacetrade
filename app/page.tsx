@@ -14,15 +14,23 @@ export default function Page() {
       }}
     >
       <style>{`
+        @media (max-width: 1180px) {
+          .hero-vehicle-art { width: 250px !important; height: 250px !important; }
+        }
         @media (max-width: 980px) {
           .hero-vehicle-art { display: none !important; }
           .dealer-clarity-grid { grid-template-columns: 1fr !important; }
           .dealer-signup-grid { grid-template-columns: 1fr !important; }
+          .trade-flow-grid { grid-template-columns: 1fr !important; }
+          .manager-review-card { order: 2; }
+          .scan-card-wrap { order: 1; }
         }
         @media (max-width: 620px) {
           .top-nav { gap: 10px !important; font-size: 12px !important; }
           .dealer-name { font-size: 12px !important; }
           .vehicle-scan-section { padding-left: 10px !important; padding-right: 10px !important; }
+          .dealer-packet-header { align-items: flex-start !important; flex-direction: column !important; }
+          .dealer-packet-title { text-align: left !important; }
         }
       `}</style>
 
@@ -201,9 +209,9 @@ export default function Page() {
       <section
         id="vehicle-scan"
         className="vehicle-scan-section"
-        style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px 32px" }}
+        style={{ maxWidth: 1160, margin: "0 auto", padding: "0 14px 34px" }}
       >
-        <div style={{ textAlign: "center", marginBottom: 14 }}>
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div
             style={{
               display: "inline-flex",
@@ -233,49 +241,94 @@ export default function Page() {
               letterSpacing: "-0.04em",
             }}
           >
-            A live trade capture app for your website.
+            From scan to desk — one clean flow.
           </h2>
 
           <p
             style={{
               margin: "0 auto",
-              maxWidth: 620,
+              maxWidth: 680,
               color: "#475569",
               fontSize: 14,
               fontWeight: 700,
               lineHeight: 1.45,
             }}
           >
-            Customers scan their vehicle, receive a real offer response, and your team gets a ready-to-work deal backed by real vehicle data.
+            Customers scan their vehicle, receive a real offer response, and your team gets a manager-ready review packet backed by real vehicle data.
           </p>
         </div>
 
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 30,
-            border: "2px solid #b91c1c",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
-            boxShadow: "0 28px 80px rgba(15,23,42,0.16)",
-          }}
-        >
-          <div
-            style={{
-              borderRadius: 24,
-              border: "1px solid #e2e8f0",
-              overflow: "hidden",
-              background: "white",
-            }}
-          >
-            <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+        <div className="trade-flow-grid" style={tradeFlowGrid}>
+          <div className="scan-card-wrap" style={scanColumn}>
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 30,
+                border: "2px solid #b91c1c",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
+                boxShadow: "0 28px 80px rgba(15,23,42,0.16)",
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: 24,
+                  border: "1px solid #e2e8f0",
+                  overflow: "hidden",
+                  background: "white",
+                }}
+              >
+                <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+              </div>
+            </div>
           </div>
+
+          <aside className="manager-review-card" style={managerReviewCard}>
+            <div style={managerReviewTopline}>
+              <span style={managerReviewBadge}>Step 2</span>
+              <span style={managerReviewStatus}>Manager packet</span>
+            </div>
+
+            <h3 style={managerReviewTitle}>Manager review — ready instantly.</h3>
+            <p style={managerReviewCopy}>
+              Every scan builds a clean packet your desk can actually use.
+            </p>
+
+            <div style={managerImageShell}>
+              <img
+                src="/images/manager_review_01.png"
+                alt="Manager review packet screen"
+                style={managerReviewImage}
+              />
+            </div>
+
+            <div style={managerBullets}>
+              <div style={managerBulletItem}>
+                <span style={managerBulletCheck}>✓</span>
+                <span>VIN, mileage, and photos pre-filled</span>
+              </div>
+              <div style={managerBulletItem}>
+                <span style={managerBulletCheck}>✓</span>
+                <span>Trim and options decoded automatically</span>
+              </div>
+              <div style={managerBulletItem}>
+                <span style={managerBulletCheck}>✓</span>
+                <span>Routed to your used car manager flow</span>
+              </div>
+              <div style={managerBulletItem}>
+                <span style={managerBulletCheck}>✓</span>
+                <span>No more chasing incomplete trade forms</span>
+              </div>
+            </div>
+          </aside>
         </div>
 
         <div style={dealerPacketBar}>
-          <div style={dealerPacketHeader}>
+          <div className="dealer-packet-header" style={dealerPacketHeader}>
             <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
-            <strong style={dealerPacketTitle}>Everything your team needs to work the deal faster.</strong>
+            <strong className="dealer-packet-title" style={dealerPacketTitle}>
+              Everything your team needs to work the deal faster.
+            </strong>
           </div>
 
           <div className="dealer-clarity-grid" style={dealerPacketGrid}>
@@ -540,15 +593,121 @@ const vehicleArtOverlay: CSSProperties = {
   boxShadow: "0 16px 34px rgba(0,0,0,0.26)",
 };
 
-const heroPill: CSSProperties = {
+const tradeFlowGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 760px) minmax(310px, 380px)",
+  justifyContent: "center",
+  alignItems: "start",
+  gap: 18,
+};
+
+const scanColumn: CSSProperties = {
+  minWidth: 0,
+};
+
+const managerReviewCard: CSSProperties = {
+  borderRadius: 30,
+  padding: 18,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 28px 80px rgba(15,23,42,0.14)",
+  position: "sticky",
+  top: 84,
+};
+
+const managerReviewTopline: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const managerReviewBadge: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   padding: "7px 10px",
   borderRadius: 999,
-  background: "white",
-  border: "1px solid #e2e8f0",
+  background: "#fee2e2",
+  color: "#991b1b",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const managerReviewStatus: CSSProperties = {
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+};
+
+const managerReviewTitle: CSSProperties = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: "clamp(24px, 2.4vw, 32px)",
+  lineHeight: 0.98,
+  letterSpacing: "-0.05em",
+};
+
+const managerReviewCopy: CSSProperties = {
+  margin: "10px 0 14px",
+  color: "#475569",
+  fontSize: 14,
+  fontWeight: 750,
+  lineHeight: 1.45,
+};
+
+const managerImageShell: CSSProperties = {
+  borderRadius: 22,
+  overflow: "hidden",
+  border: "1px solid #cbd5e1",
+  background: "#0f172a",
+  boxShadow: "0 18px 42px rgba(15,23,42,0.16)",
+};
+
+const managerReviewImage: CSSProperties = {
+  display: "block",
+  width: "100%",
+  height: "auto",
+};
+
+const managerBullets: CSSProperties = {
+  display: "grid",
+  gap: 9,
+  marginTop: 14,
+};
+
+const managerBulletItem: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "24px minmax(0, 1fr)",
+  alignItems: "start",
+  gap: 9,
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 850,
+  lineHeight: 1.28,
+};
+
+const managerBulletCheck: CSSProperties = {
+  width: 22,
+  height: 22,
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#dcfce7",
+  color: "#166534",
+  fontSize: 13,
+  fontWeight: 950,
 };
 
 const dealerPacketBar: CSSProperties = {
-  marginTop: 14,
+  maxWidth: 760,
+  margin: "16px auto 0",
   padding: 14,
   borderRadius: 24,
   background: "white",
