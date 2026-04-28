@@ -283,6 +283,34 @@ export default function Page() {
                 <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
               </div>
             </div>
+
+        <div style={dealerPacketBar}>
+          <div className="dealer-packet-header" style={dealerPacketHeader}>
+            <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
+            <strong className="dealer-packet-title" style={dealerPacketTitle}>
+              Everything your team needs to work the deal faster.
+            </strong>
+          </div>
+
+          <div className="dealer-clarity-grid" style={dealerPacketGrid}>
+            <div style={dealerPacketItem}>
+              <span style={dealerPacketIcon}>01</span>
+              <strong style={dealerClarityTitle}>Live on your site</strong>
+              <span style={dealerClarityBody}>Trade capture stays branded to the dealership.</span>
+            </div>
+            <div style={dealerPacketItem}>
+              <span style={dealerPacketIcon}>02</span>
+              <strong style={dealerClarityTitle}>Real vehicle evidence</strong>
+              <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
+            </div>
+            <div style={dealerPacketItem}>
+              <span style={dealerPacketIcon}>03</span>
+              <strong style={dealerClarityTitle}>Immediate next step</strong>
+              <span style={dealerClarityBody}>Customer gets a clean answer while your desk keeps final inspection control.</span>
+            </div>
+          </div>
+        </div>
+
           </div>
 
           <aside className="manager-review-card" style={managerReviewCard}>
@@ -326,32 +354,6 @@ export default function Page() {
           </div>
         </div>
 
-        <div style={dealerPacketBar}>
-          <div className="dealer-packet-header" style={dealerPacketHeader}>
-            <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
-            <strong className="dealer-packet-title" style={dealerPacketTitle}>
-              Everything your team needs to work the deal faster.
-            </strong>
-          </div>
-
-          <div className="dealer-clarity-grid" style={dealerPacketGrid}>
-            <div style={dealerPacketItem}>
-              <span style={dealerPacketIcon}>01</span>
-              <strong style={dealerClarityTitle}>Live on your site</strong>
-              <span style={dealerClarityBody}>Trade capture stays branded to the dealership.</span>
-            </div>
-            <div style={dealerPacketItem}>
-              <span style={dealerPacketIcon}>02</span>
-              <strong style={dealerClarityTitle}>Real vehicle evidence</strong>
-              <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
-            </div>
-            <div style={dealerPacketItem}>
-              <span style={dealerPacketIcon}>03</span>
-              <strong style={dealerClarityTitle}>Immediate next step</strong>
-              <span style={dealerClarityBody}>Customer gets a clean answer while your desk keeps final inspection control.</span>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section
@@ -735,8 +737,9 @@ const managerBulletCheck: CSSProperties = {
 };
 
 const dealerPacketBar: CSSProperties = {
-  maxWidth: 760,
-  margin: "16px auto 0",
+  width: "100%",
+  boxSizing: "border-box",
+  margin: "14px 0 0",
   padding: 14,
   borderRadius: 24,
   background: "white",
