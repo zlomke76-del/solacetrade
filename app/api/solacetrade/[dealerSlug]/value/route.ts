@@ -67,6 +67,49 @@ type DamageFlag = {
   note: string | null;
 };
 
+type PhotoReviewStepKey = "front" | "driverSide" | "rear" | "odometer" | "vin";
+
+type PhotoReviewStepStatus = "ACCEPTED" | "REJECTED" | "UNCLEAR";
+
+type PhotoVehicleMatch = "MATCH" | "MISMATCH" | "UNKNOWN" | "NOT_APPLICABLE";
+
+type PhotoImageQuality = "GOOD" | "FAIR" | "POOR";
+
+type PhotoDamageSeverity = "none" | "minor" | "moderate" | "major" | "unknown";
+
+type PhotoDamageChecklistItem = {
+  panel: string | null;
+  checked: boolean;
+  damageVisible: boolean;
+  damageType: string | null;
+  severity: PhotoDamageSeverity;
+  confidence: VisualConditionConfidence;
+  note: string | null;
+};
+
+type PhotoReviewStep = {
+  stepKey: PhotoReviewStepKey;
+  status: PhotoReviewStepStatus;
+  expectedView: string | null;
+  actualView: string | null;
+  vehicleMatch: PhotoVehicleMatch;
+  imageQuality: PhotoImageQuality;
+  usableForCondition: boolean;
+  visiblePanels: string[];
+  damageChecklist: PhotoDamageChecklistItem[];
+  inconsistencies: string[];
+  retakeRequired: boolean;
+  customerInstruction: string | null;
+  dealerNote: string | null;
+};
+
+type PhotoReview = {
+  overallStatus: "PASS" | "RETAKE_REQUIRED";
+  finalApprovalAllowed: boolean;
+  steps: PhotoReviewStep[];
+  retakeSteps: PhotoReviewStep[];
+};
+
 type ExecutionAdmissibility = {
   allowed: boolean;
   customerCertificatePermitted: boolean;
@@ -92,6 +135,7 @@ type ExtendedSolaceValuePayload = {
   executionAdmissibility?: ExecutionAdmissibility;
   missingItems?: string[];
   dealerReviewNotes?: string[];
+  photoReview?: PhotoReview | null;
   detectedVin?: string | null;
   detectedMileage?: string | number | null;
   detectedMileageUnit?: string | null;
@@ -354,6 +398,186 @@ function normalizeDamageFlags(value: unknown): DamageFlag[] {
     .filter((flag): flag is DamageFlag => Boolean(flag));
 }
 
+function normalizePhotoStepKey(value: unknown): PhotoReviewStepKey | null {
+  const text = String(value || "").trim();
+
+  if (text === "front") return "front";
+  if (text === "driverSide") return "driverSide";
+  if (text === "rear") return "rear";
+  if (text === "odometer") return "odometer";
+  if (text === "vin") return "vin";
+
+  return null;
+}
+
+function normalizePhotoReviewStatus(value: unknown): PhotoReviewStepStatus {
+  const text = String(value || "").trim().toUpperCase();
+
+  if (text === "ACCEPTED") return "ACCEPTED";
+  if (text === "REJECTED") return "REJECTED";
+
+  return "UNCLEAR";
+}
+
+function normalizePhotoVehicleMatch(value: unknown): PhotoVehicleMatch {
+  const text = String(value || "").trim().toUpperCase();
+
+  if (text === "MATCH") return "MATCH";
+  if (text === "MISMATCH") return "MISMATCH";
+  if (text === "NOT_APPLICABLE") return "NOT_APPLICABLE";
+
+  return "UNKNOWN";
+}
+
+function normalizePhotoImageQuality(value: unknown): PhotoImageQuality {
+  const text = String(value || "").trim().toUpperCase();
+
+  if (text === "GOOD") return "GOOD";
+  if (text === "POOR") return "POOR";
+
+  return "FAIR";
+}
+
+function normalizePhotoDamageSeverity(value: unknown): PhotoDamageSeverity {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "none") return "none";
+  if (text === "minor") return "minor";
+  if (text === "moderate") return "moderate";
+  if (text === "major") return "major";
+
+  return "unknown";
+}
+
+function normalizePhotoDamageChecklist(value: unknown): PhotoDamageChecklistItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const entry = item as Record<string, unknown>;
+      const panel = cleanVehicleText(entry.panel);
+      const damageType = cleanVehicleText(entry.damageType);
+      const note = cleanVehicleText(entry.note);
+
+      if (!panel && !damageType && !note) return null;
+
+      return {
+        panel,
+        checked: Boolean(entry.checked),
+        damageVisible: Boolean(entry.damageVisible),
+        damageType,
+        severity: normalizePhotoDamageSeverity(entry.severity),
+        confidence: normalizeConditionConfidence(entry.confidence),
+        note,
+      };
+    })
+    .filter((entry): entry is PhotoDamageChecklistItem => Boolean(entry));
+}
+
+function normalizePhotoReview(value: unknown): PhotoReview | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const raw = value as Record<string, unknown>;
+  const rawSteps = Array.isArray(raw.steps) ? raw.steps : [];
+  const steps = rawSteps
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const rawStep = item as Record<string, unknown>;
+      const stepKey = normalizePhotoStepKey(rawStep.stepKey);
+
+      if (!stepKey) return null;
+
+      const status = normalizePhotoReviewStatus(rawStep.status);
+      const vehicleMatch = normalizePhotoVehicleMatch(rawStep.vehicleMatch);
+      const imageQuality = normalizePhotoImageQuality(rawStep.imageQuality);
+      const visiblePanels = getCleanStringArray(rawStep.visiblePanels, 20);
+      const inconsistencies = getCleanStringArray(rawStep.inconsistencies, 12);
+      const damageChecklist = normalizePhotoDamageChecklist(rawStep.damageChecklist);
+      const usableForCondition = Boolean(rawStep.usableForCondition);
+      const retakeRequired =
+        Boolean(rawStep.retakeRequired) ||
+        status === "REJECTED" ||
+        vehicleMatch === "MISMATCH" ||
+        imageQuality === "POOR" ||
+        !usableForCondition;
+
+      return {
+        stepKey,
+        status,
+        expectedView: cleanVehicleText(rawStep.expectedView),
+        actualView: cleanVehicleText(rawStep.actualView),
+        vehicleMatch,
+        imageQuality,
+        usableForCondition,
+        visiblePanels,
+        damageChecklist,
+        inconsistencies,
+        retakeRequired,
+        customerInstruction: cleanVehicleText(rawStep.customerInstruction),
+        dealerNote: cleanVehicleText(rawStep.dealerNote),
+      };
+    })
+    .filter((step): step is PhotoReviewStep => Boolean(step));
+
+  if (!steps.length) return null;
+
+  const retakeSteps = steps.filter((step) => step.retakeRequired);
+  const finalApprovalAllowed =
+    raw.finalApprovalAllowed === true && retakeSteps.length === 0;
+
+  return {
+    overallStatus:
+      raw.overallStatus === "PASS" && finalApprovalAllowed
+        ? "PASS"
+        : "RETAKE_REQUIRED",
+    finalApprovalAllowed,
+    steps,
+    retakeSteps,
+  };
+}
+
+function photoReviewRequiresRetake(photoReview: PhotoReview | null) {
+  return Boolean(
+    photoReview &&
+      (!photoReview.finalApprovalAllowed ||
+        photoReview.overallStatus === "RETAKE_REQUIRED" ||
+        photoReview.retakeSteps.length > 0)
+  );
+}
+
+function photoReviewRetakeSummary(photoReview: PhotoReview | null) {
+  if (!photoReview?.retakeSteps.length) return [];
+
+  return photoReview.retakeSteps.map((step) => {
+    const reason =
+      step.customerInstruction ||
+      step.dealerNote ||
+      step.inconsistencies.join(" ") ||
+      "Photo must be retaken before final approval.";
+
+    return `${step.stepKey}: ${reason}`;
+  });
+}
+
+function flattenPhotoDamageFlags(photoReview: PhotoReview | null): DamageFlag[] {
+  if (!photoReview) return [];
+
+  return photoReview.steps.flatMap((step) =>
+    step.damageChecklist
+      .filter((item) => item.damageVisible)
+      .map((item) => ({
+        panel: item.panel || step.expectedView || step.stepKey,
+        type: item.damageType,
+        severity: item.severity === "none" ? "unknown" : item.severity,
+        confidence: item.confidence,
+        note: item.note || step.dealerNote,
+      }))
+  );
+}
+
 function requiresInspection({
   conditionScore,
   visualConditionConfidence,
@@ -585,6 +809,157 @@ function applyCrossBorderMarketAdjustment(input: {
   return Math.round(input.amount * 0.92);
 }
 
+async function reviewPhotosAgainstDecodedVehicle(input: {
+  apiKey: string;
+  model: string;
+  dealerName: string;
+  decodedVehicleLabel: string;
+  detectedVin: string;
+  photoManifest: Array<{ stepKey: string; hasSignedUrl: boolean }>;
+  frontUrl: string | null;
+  driverSideUrl: string | null;
+  rearUrl: string | null;
+  odometerUrl: string | null;
+  vinUrl: string | null;
+}): Promise<PhotoReview | null> {
+  if (!input.detectedVin || !input.decodedVehicleLabel) return null;
+
+  const prompt = `
+You are SolaceTrade's final photo admissibility reviewer.
+
+The customer uploaded five photos in this exact order:
+1. front: full front exterior
+2. driverSide: full driver-side exterior
+3. rear: full rear exterior
+4. odometer: odometer display
+5. vin: VIN plate/label
+
+Decoded VIN vehicle:
+- VIN: ${input.detectedVin}
+- Vehicle: ${input.decodedVehicleLabel}
+- Dealer: ${input.dealerName}
+
+Your job is NOT to produce a value. Your job is only to determine whether each photo is acceptable for final approval and to document visible damage or inconsistencies per picture.
+
+Return ONLY valid JSON with this exact shape:
+{
+  "photoReview": {
+    "overallStatus": "PASS" | "RETAKE_REQUIRED",
+    "finalApprovalAllowed": boolean,
+    "steps": [
+      {
+        "stepKey": "front" | "driverSide" | "rear" | "odometer" | "vin",
+        "status": "ACCEPTED" | "REJECTED" | "UNCLEAR",
+        "expectedView": string | null,
+        "actualView": string | null,
+        "vehicleMatch": "MATCH" | "MISMATCH" | "UNKNOWN" | "NOT_APPLICABLE",
+        "imageQuality": "GOOD" | "FAIR" | "POOR",
+        "usableForCondition": boolean,
+        "visiblePanels": string[],
+        "damageChecklist": [
+          {
+            "panel": string | null,
+            "checked": boolean,
+            "damageVisible": boolean,
+            "damageType": string | null,
+            "severity": "none" | "minor" | "moderate" | "major" | "unknown",
+            "confidence": "Low" | "Medium" | "High",
+            "note": string | null
+          }
+        ],
+        "inconsistencies": string[],
+        "retakeRequired": boolean,
+        "customerInstruction": string | null,
+        "dealerNote": string | null
+      }
+    ],
+    "retakeSteps": []
+  }
+}
+
+Rules:
+- Each of the five step keys must appear exactly once in steps.
+- For front, driverSide, and rear: compare the visible vehicle against the decoded VIN vehicle. If the photo appears to show a different vehicle, set vehicleMatch = "MISMATCH", status = "REJECTED", usableForCondition = false, retakeRequired = true.
+- For odometer and vin: vehicleMatch may be "NOT_APPLICABLE" unless there is an obvious mismatch.
+- If the angle is wrong, image is blurry, too dark, too cropped, or not useful, set status = "REJECTED", imageQuality = "POOR", usableForCondition = false, retakeRequired = true.
+- If you are uncertain, use status = "UNCLEAR" and explain why.
+- For each exterior photo, list the visible panels and a damageChecklist for the panels actually visible.
+- If no damage is visible on a visible panel, include a checklist item with damageVisible = false and severity = "none".
+- Do not say a panel is clean unless the image makes that panel reasonably visible.
+- No visible damage does not mean no damage. If visibility is limited, say so and mark confidence Low or Medium.
+- If any retakeRequired is true, overallStatus must be "RETAKE_REQUIRED" and finalApprovalAllowed must be false.
+- If all steps are acceptable, overallStatus must be "PASS" and finalApprovalAllowed must be true.
+- retakeSteps must contain the same rejected/retake step objects from steps.
+- Customer instructions should be short and specific.
+- Dealer notes should be operational and direct.
+- Do not include markdown.
+- Do not include text outside JSON.
+
+Photo manifest: ${JSON.stringify(input.photoManifest)}
+`.trim();
+
+  const content: Array<Record<string, unknown>> = [
+    { type: "text", text: prompt },
+  ];
+
+  for (const url of [
+    input.frontUrl,
+    input.driverSideUrl,
+    input.rearUrl,
+    input.odometerUrl,
+    input.vinUrl,
+  ]) {
+    if (url) {
+      content.push({
+        type: "image_url",
+        image_url: { url },
+      });
+    }
+  }
+
+  try {
+    const response = await fetch(gatewayUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: input.model,
+        messages: [
+          {
+            role: "user",
+            content,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 2600,
+      }),
+    });
+
+    const gatewayJson = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error("SolaceTrade photo review gateway error", {
+        status: response.status,
+        payload: gatewayJson,
+      });
+      return null;
+    }
+
+    const rawText = extractMessageText(gatewayJson);
+    const jsonText = safeJsonText(rawText);
+    const parsed = JSON.parse(jsonText) as { photoReview?: unknown };
+
+    return normalizePhotoReview(parsed.photoReview);
+  } catch (error) {
+    console.error("SolaceTrade photo review failed", {
+      error: error instanceof Error ? error.message : "Unknown photo review error",
+    });
+    return null;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -682,6 +1057,7 @@ Your task:
 5. Identify visible value-relevant option signals only.
 6. Produce a structured visual condition assessment for dealer review.
 7. Produce a conservative instant cash offer payload for dealer review using the dealer's local valuation market.
+8. Perform a first-pass photo inspection for visible damage, poor image quality, wrong angle, or obvious inconsistencies.
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -707,6 +1083,38 @@ Return ONLY valid JSON with this exact shape:
   "inspectionRequired": boolean,
   "missingItems": string[],
   "dealerReviewNotes": string[],
+  "photoReview": {
+    "overallStatus": "PASS" | "RETAKE_REQUIRED",
+    "finalApprovalAllowed": boolean,
+    "steps": [
+      {
+        "stepKey": "front" | "driverSide" | "rear" | "odometer" | "vin",
+        "status": "ACCEPTED" | "REJECTED" | "UNCLEAR",
+        "expectedView": string | null,
+        "actualView": string | null,
+        "vehicleMatch": "MATCH" | "MISMATCH" | "UNKNOWN" | "NOT_APPLICABLE",
+        "imageQuality": "GOOD" | "FAIR" | "POOR",
+        "usableForCondition": boolean,
+        "visiblePanels": string[],
+        "damageChecklist": [
+          {
+            "panel": string | null,
+            "checked": boolean,
+            "damageVisible": boolean,
+            "damageType": string | null,
+            "severity": "none" | "minor" | "moderate" | "major" | "unknown",
+            "confidence": "Low" | "Medium" | "High",
+            "note": string | null
+          }
+        ],
+        "inconsistencies": string[],
+        "retakeRequired": boolean,
+        "customerInstruction": string | null,
+        "dealerNote": string | null
+      }
+    ],
+    "retakeSteps": []
+  },
   "detectedVin": string | null,
   "detectedMileage": number | null,
   "detectedMileageUnit": "mi" | "km",
@@ -763,6 +1171,10 @@ Rules:
 - conditionScore must be 1-5 where 5 means clean/excellent visible condition and 1 means major visible damage or severe uncertainty.
 - visualConditionConfidence must reflect photo quality, angle coverage, lighting, and whether damage can be inspected clearly.
 - damageFlags must identify only visible damage or visible concern signals. Do not invent damage. Use [] if no damage is visible.
+- photoReview must inspect every photo step individually. Each step must state expectedView, actualView, vehicleMatch, imageQuality, usableForCondition, visiblePanels, damageChecklist, inconsistencies, retakeRequired, customerInstruction, and dealerNote.
+- For every visible exterior panel, include a damageChecklist item. If damage is not visible, set damageVisible = false and severity = "none". If a panel is not visible or not checkable, do not claim it is clean.
+- If an exterior photo appears to show a different vehicle than the other exterior photos or the VIN evidence, mark that step REJECTED and retakeRequired.
+- If any photo is rejected, blurry, dark, cropped, wrong angle, or unusable for condition, photoReview.overallStatus must be RETAKE_REQUIRED and photoReview.finalApprovalAllowed must be false.
 - inspectionRequired should be true if photo quality is low, conditionScore <= 2, moderate/major damage is visible, or the images do not support a confident condition read.
 - Use optionSignals for visible price-impacting equipment clues from photos only, such as badging, wheel style, sunroof, panoramic roof, tow package, 4x4/AWD badge, leather, premium audio, navigation, roof rails, or driver-assist sensors.
 - Do not use optionSignals for generic facts like doors, fuel type, body class, brake type, vehicle class, hydraulic brakes, GVWR, or MPV/SUV classification.
@@ -950,13 +1362,46 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       vehicleSeries,
     ]);
 
-    const damageFlags = normalizeDamageFlags(parsed.damageFlags);
+    const decodedVehicleLabel = compactVehicleParts([
+      vehicleYear,
+      vehicleMake,
+      vehicleModel,
+      vehicleTrim,
+    ]);
+
+    const decodedPhotoReview = await reviewPhotosAgainstDecodedVehicle({
+      apiKey,
+      model: getModel(),
+      dealerName: dealer.name,
+      decodedVehicleLabel: decodedVehicleLabel || "",
+      detectedVin,
+      photoManifest,
+      frontUrl,
+      driverSideUrl,
+      rearUrl,
+      odometerUrl,
+      vinUrl,
+    });
+
+    const photoReview =
+      decodedPhotoReview || normalizePhotoReview(parsed.photoReview);
+    const photoRetakeRequired = photoReviewRequiresRetake(photoReview);
+
+    const damageFlags = [
+      ...normalizeDamageFlags(parsed.damageFlags),
+      ...flattenPhotoDamageFlags(photoReview),
+    ];
     const conditionScore = cleanConditionScore(parsed.conditionScore);
-    const visualConditionConfidence = normalizeConditionConfidence(
+    const baseVisualConditionConfidence = normalizeConditionConfidence(
       parsed.visualConditionConfidence
     );
+    const visualConditionConfidence =
+      photoRetakeRequired && baseVisualConditionConfidence === "High"
+        ? "Medium"
+        : baseVisualConditionConfidence;
     const inspectionRequired =
       Boolean(parsed.inspectionRequired) ||
+      photoRetakeRequired ||
       requiresInspection({
         conditionScore,
         visualConditionConfidence,
@@ -992,6 +1437,12 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       );
     }
 
+    if (photoRetakeRequired) {
+      dealerReviewNotes.push(
+        `Photo validation requires retake before final approval: ${photoReviewRetakeSummary(photoReview).join(" ")}`
+      );
+    }
+
     const adjustedOfferAmount = applyCrossBorderMarketAdjustment({
       amount: parsed.offerAmount,
       shouldAdjust: crossBorderAdjusted,
@@ -1005,19 +1456,43 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       shouldAdjust: crossBorderAdjusted,
     });
 
+    const finalConfidence =
+      photoRetakeRequired && parsed.confidence === "High"
+        ? "Medium"
+        : parsed.confidence;
+    const finalAdmissibility = photoRetakeRequired
+      ? "PARTIAL"
+      : parsed.admissibility;
+
     const missingItems = getCleanStringArray(parsed.missingItems);
     const executionAdmissibility = buildExecutionAdmissibility({
       mode: intake.mode,
       photoCount: photos.length,
       detectedVin,
       detectedMileage,
+      confidence: finalConfidence,
+      admissibility: finalAdmissibility,
       offerAmount: adjustedOfferAmount,
-      confidence: parsed.confidence,
-      admissibility: parsed.admissibility,
+      confidence: finalConfidence,
+      admissibility: finalAdmissibility,
       missingItems,
       inspectionRequired,
       visualConditionConfidence,
     });
+
+    if (photoRetakeRequired) {
+      executionAdmissibility.allowed = false;
+      executionAdmissibility.customerCertificatePermitted = false;
+      if (
+        !executionAdmissibility.reasons.includes(
+          "One or more required photos must be retaken before final approval."
+        )
+      ) {
+        executionAdmissibility.reasons.push(
+          "One or more required photos must be retaken before final approval."
+        );
+      }
+    }
 
     if (!executionAdmissibility.allowed) {
       dealerReviewNotes.push(
@@ -1054,6 +1529,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       missingItems,
       conditionNotes,
       dealerReviewNotes,
+      photoReview,
       vin: detectedVin || null,
       mileage: detectedMileage,
       mileageUnit,
@@ -1184,6 +1660,9 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           visualConditionConfidence,
           inspectionRequired,
           damageFlagCount: damageFlags.length,
+          photoReviewStatus: photoReview?.overallStatus || null,
+          retakeRequired: photoRetakeRequired,
+          retakeSteps: photoReview?.retakeSteps.map((step) => step.stepKey) || [],
         },
         executionAdmissibility,
         offerAmount: valuePayload.offerAmount,
