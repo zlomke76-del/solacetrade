@@ -1,6 +1,7 @@
 "use client";
 
 import TradeDesk from "../components/TradeDesk";
+import type { CSSProperties } from "react";
 
 export default function Page() {
   return (
@@ -12,6 +13,20 @@ export default function Page() {
         fontFamily: "Arial, Helvetica, sans-serif",
       }}
     >
+      <style>{`
+        @media (max-width: 980px) {
+          .hero-vehicle-art { display: none !important; }
+          .dealer-advantage-grid { grid-template-columns: 1fr !important; }
+          .dealer-clarity-grid { grid-template-columns: 1fr !important; }
+          .dealer-signup-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 620px) {
+          .top-nav { gap: 10px !important; font-size: 12px !important; }
+          .dealer-name { font-size: 12px !important; }
+          .vehicle-scan-section { padding-left: 10px !important; padding-right: 10px !important; }
+        }
+      `}</style>
+
       <div
         style={{
           background: "#0b0b0b",
@@ -39,8 +54,10 @@ export default function Page() {
           zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: 14 }}>Jersey Village Chrysler Jeep Dodge Ram</strong>
-        <nav style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
+        <strong className="dealer-name" style={{ fontSize: 14 }}>
+          Jersey Village Chrysler Jeep Dodge Ram
+        </strong>
+        <nav className="top-nav" style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
           <span>New</span>
           <span>Used</span>
           <span>Service</span>
@@ -52,44 +69,34 @@ export default function Page() {
         style={{
           position: "relative",
           overflow: "hidden",
-          padding: "30px 18px 20px",
+          padding: "30px 18px 18px",
           background:
             "radial-gradient(circle at 50% 0%, rgba(185,28,28,0.13), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%)",
           textAlign: "center",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            left: 28,
-            top: 34,
-            width: "min(370px, 22vw)",
-            minWidth: 260,
-            display: "block",
-          }}
-        >
-          <FeatureImageCard
-            src="/images/jeep_01.png"
-            title="Capture high-intent buyers"
-            body="Turn website traffic into real trade opportunities."
-          />
+        <div className="hero-vehicle-art" style={{ ...heroVehicleArt, left: 24 }}>
+          <img src="/images/jeep_01.png" alt="Baja-style Jeep on sand dunes" style={heroVehicleImage} />
+          <div className="inventory-top-badge" style={inventoryTopBadge}>
+            <strong style={inventoryTopTitle}>New Jeep Inventory</strong>
+            <span style={inventoryTopAction}>View all</span>
+          </div>
+          <div style={vehicleArtOverlay}>
+            <strong>Wrangler • Gladiator • Off-Road Ready</strong>
+            <span>Scan your trade and move into the Jeep you want.</span>
+          </div>
         </div>
 
-        <div
-          style={{
-            position: "absolute",
-            right: 28,
-            top: 34,
-            width: "min(370px, 22vw)",
-            minWidth: 260,
-            display: "block",
-          }}
-        >
-          <FeatureImageCard
-            src="/images/ram_truck_01.png"
-            title="Real vehicle data"
-            body="Photos, VIN, mileage — before your team even engages."
-          />
+        <div className="hero-vehicle-art" style={{ ...heroVehicleArt, right: 24 }}>
+          <img src="/images/ram_truck_01.png" alt="Lifted Ram truck on a mountain dirt road" style={heroVehicleImage} />
+          <div className="inventory-top-badge" style={inventoryTopBadge}>
+            <strong style={inventoryTopTitle}>New Ram Inventory</strong>
+            <span style={inventoryTopAction}>View all</span>
+          </div>
+          <div style={vehicleArtOverlay}>
+            <strong>Ram 1500 • Heavy Duty • Work Trucks</strong>
+            <span>Get a real trade offer and shop trucks with confidence.</span>
+          </div>
         </div>
 
         <div style={{ maxWidth: 1040, margin: "0 auto", position: "relative", zIndex: 2 }}>
@@ -177,27 +184,24 @@ export default function Page() {
             Final value confirmed upon inspection.
           </p>
 
-          <div
+          <p
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              gap: 8,
-              marginTop: 14,
+              margin: "14px auto 0",
               color: "#334155",
               fontSize: 12,
-              fontWeight: 800,
+              fontWeight: 900,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
             }}
           >
-            <span style={heroPill}>No form guessing</span>
-            <span style={heroPill}>Live vehicle scan</span>
-            <span style={heroPill}>Dealer-ready instantly</span>
-          </div>
+            Trade value first. Inventory next. One clean path.
+          </p>
         </div>
       </section>
 
       <section
         id="vehicle-scan"
+        className="vehicle-scan-section"
         style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px 32px" }}
       >
         <div style={{ textAlign: "center", marginBottom: 14 }}>
@@ -223,28 +227,15 @@ export default function Page() {
 
           <h2
             style={{
-              margin: "0 auto 5px",
+              margin: "0 auto 6px",
               color: "#0f172a",
               fontSize: "clamp(22px, 3vw, 30px)",
               lineHeight: 1.08,
               letterSpacing: "-0.04em",
             }}
           >
-            This is the trade form — rebuilt.
-          </h2>
-
-          <p
-            style={{
-              margin: "0 auto 6px",
-              maxWidth: 620,
-              color: "#0f172a",
-              fontSize: 17,
-              fontWeight: 900,
-              lineHeight: 1.25,
-            }}
-          >
             A live trade capture app for your website.
-          </p>
+          </h2>
 
           <p
             style={{
@@ -282,14 +273,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: 12,
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 8,
-          }}
-        >
+        <div className="dealer-clarity-grid" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
           <div style={dealerClarityCard}>
             <strong style={dealerClarityTitle}>Live on your site</strong>
             <span style={dealerClarityBody}>The app sits inside your trade page.</span>
@@ -321,8 +305,9 @@ export default function Page() {
 
       <section style={{ padding: "24px 18px 38px" }}>
         <div
+          className="dealer-advantage-grid"
           style={{
-            maxWidth: 900,
+            maxWidth: 1060,
             margin: "0 auto",
             display: "grid",
             gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -330,29 +315,13 @@ export default function Page() {
           }}
         >
           {[
-            ["No waiting", "Scan the vehicle and get a real answer immediately."],
-            ["No games", "The offer is based on the actual vehicle evidence — not a generic form."],
-            ["Your choice", "Trade it, sell it, or talk with the dealership after you see the number."],
+            ["More complete leads", "Customers submit photos, VIN, mileage, and intent before your team invests time chasing the deal."],
+            ["Faster appraisal path", "The offer flow turns a cold trade form into a guided vehicle scan your desk can actually use."],
+            ["Cleaner customer experience", "The buyer gets an answer immediately, with no gimmicks, and your dealership keeps final inspection control."],
           ].map(([title, body]) => (
-            <div
-              key={title}
-              style={{
-                padding: 17,
-                borderRadius: 21,
-                background: "white",
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
-              }}
-            >
+            <div key={title} style={advantageCard}>
               <strong style={{ display: "block", fontSize: 16 }}>{title}</strong>
-              <p
-                style={{
-                  margin: "7px 0 0",
-                  color: "#64748b",
-                  fontSize: 14,
-                  lineHeight: 1.45,
-                }}
-              >
+              <p style={{ margin: "7px 0 0", color: "#64748b", fontSize: 14, lineHeight: 1.45 }}>
                 {body}
               </p>
             </div>
@@ -368,6 +337,7 @@ export default function Page() {
         }}
       >
         <div
+          className="dealer-signup-grid"
           style={{
             maxWidth: 900,
             margin: "0 auto",
@@ -411,7 +381,7 @@ export default function Page() {
                 letterSpacing: "-0.055em",
               }}
             >
-              Enhance your trade process with real trades.
+              Turn your trade page into a real intake engine.
             </h2>
 
             <p
@@ -423,13 +393,13 @@ export default function Page() {
                 fontWeight: 700,
               }}
             >
-              Customers submit vehicles you can actually work — not guesses, not incomplete forms.
+              TradeDesk gives your dealership a branded scan flow, structured vehicle evidence, and a faster path from customer interest to workable offer.
             </p>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
-              <span style={darkPill}>Live on your site</span>
-              <span style={darkPill}>Structured trades</span>
-              <span style={darkPill}>Dealer-ready</span>
+              <span style={darkPill}>Website-ready</span>
+              <span style={darkPill}>Evidence-based</span>
+              <span style={darkPill}>Dealer-controlled</span>
             </div>
           </div>
 
@@ -462,24 +432,11 @@ export default function Page() {
 
             <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Dealer Access</h3>
 
-            <p
-              style={{
-                margin: "6px 0 16px",
-                color: "#64748b",
-                fontSize: 13,
-                lineHeight: 1.45,
-                maxWidth: 300,
-              }}
-            >
+            <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45, maxWidth: 300 }}>
               Complete setup and subscription to begin onboarding.
             </p>
 
-            <a
-              href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200"
-              target="_blank"
-              rel="noreferrer"
-              style={primaryBtn}
-            >
+            <a href="https://buy.stripe.com/bJe9AUdeb70SfkN0jUcV200" target="_blank" rel="noreferrer" style={primaryBtn}>
               <span>Start Subscription</span>
               <span>$595/mo</span>
             </a>
@@ -540,86 +497,88 @@ export default function Page() {
   );
 }
 
-function FeatureImageCard({ src, title, body }: { src: string; title: string; body: string }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        height: 300,
-        borderRadius: 28,
-        overflow: "hidden",
-        border: "1px solid rgba(15,23,42,0.28)",
-        background: "#0f172a",
-        boxShadow: "0 28px 70px rgba(15,23,42,0.18)",
-      }}
-    >
-      <img
-        src={src}
-        alt="TradeDesk dealership vehicle example"
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          display: "block",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0.05))",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: 16,
-          right: 16,
-          bottom: 14,
-          padding: "13px 15px",
-          borderRadius: 18,
-          background: "rgba(15,23,42,0.92)",
-          color: "white",
-          textAlign: "left",
-          boxShadow: "0 18px 38px rgba(0,0,0,0.24)",
-        }}
-      >
-        <strong
-          style={{
-            display: "block",
-            fontSize: 14,
-            lineHeight: 1.1,
-            fontWeight: 900,
-            letterSpacing: "-0.01em",
-          }}
-        >
-          {title}
-        </strong>
-        <span
-          style={{
-            display: "block",
-            marginTop: 5,
-            color: "#e2e8f0",
-            fontSize: 12,
-            lineHeight: 1.3,
-            fontWeight: 800,
-          }}
-        >
-          {body}
-        </span>
-      </div>
-    </div>
-  );
-}
+const heroVehicleArt: CSSProperties = {
+  position: "absolute",
+  top: 24,
+  width: "min(25vw, 360px)",
+  minWidth: 250,
+  height: 300,
+  borderRadius: 34,
+  overflow: "hidden",
+  background: "#0f172a",
+  border: "1px solid rgba(15,23,42,0.08)",
+  boxShadow: "0 30px 80px rgba(15,23,42,0.16)",
+  transform: "translateY(6px)",
+};
 
-const heroPill: React.CSSProperties = {
+const heroVehicleImage: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const inventoryTopBadge: CSSProperties = {
+  position: "absolute",
+  top: 14,
+  left: 14,
+  right: 14,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  padding: "10px 12px",
+  borderRadius: 15,
+  background: "rgba(255,255,255,0.94)",
+  color: "#0f172a",
+  boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
+};
+
+const inventoryTopTitle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 950,
+  letterSpacing: "-0.01em",
+  lineHeight: 1,
+};
+
+const inventoryTopAction: CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: 999,
+  background: "#b91c1c",
+  color: "white",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
+
+const vehicleArtOverlay: CSSProperties = {
+  position: "absolute",
+  left: 14,
+  right: 14,
+  bottom: 14,
+  padding: "12px 13px",
+  borderRadius: 18,
+  background: "rgba(15,23,42,0.78)",
+  color: "white",
+  backdropFilter: "blur(12px)",
+  textAlign: "left",
+  display: "grid",
+  gap: 3,
+  fontSize: 12,
+  lineHeight: 1.25,
+  boxShadow: "0 16px 34px rgba(0,0,0,0.26)",
+};
+
+const heroPill: CSSProperties = {
   padding: "7px 10px",
   borderRadius: 999,
   background: "white",
   border: "1px solid #e2e8f0",
 };
 
-const dealerClarityCard: React.CSSProperties = {
+const dealerClarityCard: CSSProperties = {
   padding: "12px 13px",
   borderRadius: 17,
   background: "white",
@@ -627,7 +586,7 @@ const dealerClarityCard: React.CSSProperties = {
   boxShadow: "0 12px 28px rgba(15,23,42,0.05)",
 };
 
-const dealerClarityTitle: React.CSSProperties = {
+const dealerClarityTitle: CSSProperties = {
   display: "block",
   color: "#0f172a",
   fontSize: 13,
@@ -635,7 +594,7 @@ const dealerClarityTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
-const dealerClarityBody: React.CSSProperties = {
+const dealerClarityBody: CSSProperties = {
   display: "block",
   color: "#64748b",
   fontSize: 12,
@@ -643,7 +602,15 @@ const dealerClarityBody: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const darkPill: React.CSSProperties = {
+const advantageCard: CSSProperties = {
+  padding: 18,
+  borderRadius: 21,
+  background: "white",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
+};
+
+const darkPill: CSSProperties = {
   padding: "8px 11px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.09)",
@@ -653,7 +620,7 @@ const darkPill: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const primaryBtn: React.CSSProperties = {
+const primaryBtn: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -670,7 +637,7 @@ const primaryBtn: React.CSSProperties = {
   boxShadow: "0 14px 30px rgba(22,163,74,0.26)",
 };
 
-const secondaryBtn: React.CSSProperties = {
+const secondaryBtn: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
