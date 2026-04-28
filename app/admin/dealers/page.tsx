@@ -22,6 +22,7 @@ type Dealer = {
    * Future-backed fields. These are optional so this page still works against the
    * current dealers table/API while the billing + routing schema is finalized.
    */
+  crm_email?: string | null;
   routing_cc_emails?: string[] | string | null;
   billing_contact_name?: string | null;
   billing_email?: string | null;
@@ -38,6 +39,7 @@ type DealerForm = {
   legal_name: string;
   sales_phone: string;
   lead_email: string;
+  crm_email: string;
   routing_cc_emails: string;
   billing_contact_name: string;
   billing_email: string;
@@ -60,6 +62,7 @@ const blankForm: DealerForm = {
   legal_name: "",
   sales_phone: "",
   lead_email: "",
+  crm_email: "",
   routing_cc_emails: "",
   billing_contact_name: "",
   billing_email: "",
@@ -100,6 +103,7 @@ function dealerToForm(dealer: Dealer): DealerForm {
     legal_name: dealer.legal_name || "",
     sales_phone: dealer.sales_phone || "",
     lead_email: dealer.lead_email || "",
+    crm_email: dealer.crm_email || "",
     routing_cc_emails: normalizeEmailList(dealer.routing_cc_emails),
     billing_contact_name: dealer.billing_contact_name || "",
     billing_email: dealer.billing_email || "",
@@ -176,6 +180,15 @@ function labelStyle(): CSSProperties {
     color: "#334155",
     fontSize: 12,
     fontWeight: 900,
+  };
+}
+
+function helperStyle(): CSSProperties {
+  return {
+    color: muted,
+    fontSize: 11,
+    fontWeight: 700,
+    lineHeight: 1.35,
   };
 }
 
@@ -262,6 +275,8 @@ export default function AdminDealersPage() {
 
   const isEditing = Boolean(form.id);
   const routingCcCount = countEmailList(form.routing_cc_emails);
+  const managerReady = hasEmail(form.lead_email);
+  const crmReady = hasEmail(form.crm_email) || managerReady;
   const billingReady = hasEmail(form.billing_email);
   const stripeReady = Boolean(form.stripe_customer_id || form.stripe_subscription_id);
 
@@ -274,6 +289,7 @@ export default function AdminDealersPage() {
         dealer.name,
         dealer.slug,
         dealer.lead_email,
+        dealer.crm_email,
         dealer.routing_cc_emails,
         dealer.billing_contact_name,
         dealer.billing_email,
@@ -338,8 +354,9 @@ export default function AdminDealersPage() {
     try {
       /**
        * Keep the payload compatible with the current /api/admin/dealers route.
-       * Add the billing/routing/Stripe fields to the API + dealers table before
-       * persisting them, otherwise Supabase/PostgREST may reject unknown columns.
+       * crm_email is included as a future-backed CRM intake field. If your
+       * current API/table does not have this column yet, add it before deploy:
+       * alter table solacetrade.dealers add column if not exists crm_email text;
        */
       const payload = {
         id: form.id,
@@ -348,6 +365,7 @@ export default function AdminDealersPage() {
         legal_name: form.legal_name,
         sales_phone: form.sales_phone,
         lead_email: form.lead_email,
+        crm_email: form.crm_email,
         routing_cc_emails: form.routing_cc_emails,
         billing_contact_name: form.billing_contact_name,
         billing_email: form.billing_email,
@@ -373,7 +391,8 @@ export default function AdminDealersPage() {
       }
 
       const futureFieldsEntered = Boolean(
-        form.routing_cc_emails ||
+        form.crm_email ||
+          form.routing_cc_emails ||
           form.billing_contact_name ||
           form.billing_email ||
           form.billing_phone ||
@@ -383,7 +402,7 @@ export default function AdminDealersPage() {
 
       setStatus(
         futureFieldsEntered
-          ? `${isEditing ? "Dealer updated" : "Dealer created"}. Billing and CC routing saved. Stripe fields are managed by checkout/webhooks.`
+          ? `${isEditing ? "Dealer updated" : "Dealer created"}. CRM intake, billing, and CC routing saved. Stripe fields are managed by checkout/webhooks.`
           : isEditing
             ? "Dealer updated."
             : "Dealer created.",
@@ -573,7 +592,7 @@ export default function AdminDealersPage() {
               Dealer dashboard.
             </h1>
             <p style={{ margin: "8px 0 0", color: muted, maxWidth: 760, lineHeight: 1.55 }}>
-              Create dealers, configure manager routing, identify billing ownership, and prepare each
+              Create dealers, configure CRM delivery, manager routing, billing ownership, and prepare each
               dealer for Stripe subscription setup.
             </p>
           </div>
@@ -606,7 +625,7 @@ export default function AdminDealersPage() {
                   {isEditing ? "Edit dealer" : "Create dealer"}
                 </h2>
                 <p style={{ margin: "5px 0 0", color: muted, fontSize: 13, lineHeight: 1.45 }}>
-                  Name, slug, and primary manager routing email are required.
+                  Name, slug, manager routing, and CRM delivery keep every trade opportunity moving.
                 </p>
               </div>
 
@@ -652,8 +671,8 @@ export default function AdminDealersPage() {
             </div>
 
             <SectionHeader
-              title="Used car manager routing"
-              note="Trade appraisal packets route here automatically. Leave room for additional managers, GSM, or GM visibility."
+              title="Lead delivery and manager routing"
+              note="CRM intake gets the working opportunity. Manager routing keeps the used car desk informed."
             />
             <div
               style={{
@@ -674,6 +693,23 @@ export default function AdminDealersPage() {
                     placeholder="manager@dealer.com"
                     style={fieldStyle()}
                   />
+                  <span style={helperStyle()}>
+                    Oversight contact for manager review packets.
+                  </span>
+                </label>
+
+                <label style={labelStyle()}>
+                  Primary Lead / CRM Intake Email
+                  <input
+                    type="email"
+                    value={form.crm_email}
+                    onChange={(event) => updateField("crm_email", event.target.value)}
+                    placeholder="internet@dealer.com or leads@crm.com"
+                    style={fieldStyle()}
+                  />
+                  <span style={helperStyle()}>
+                    Where new trade opportunities should land. Leave blank to use the manager email.
+                  </span>
                 </label>
 
                 <label style={labelStyle()}>
@@ -691,11 +727,12 @@ export default function AdminDealersPage() {
                 style={{
                   marginTop: 10,
                   display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                   gap: 8,
                 }}
               >
-                <MiniField label="Primary packet route" value={form.lead_email || "Required"} />
+                <MiniField label="Manager route" value={form.lead_email || "Required"} />
+                <MiniField label="CRM intake" value={form.crm_email || form.lead_email || "Uses manager email"} />
                 <MiniField
                   label="Additional routing"
                   value={routingCcCount ? `${routingCcCount} additional email${routingCcCount === 1 ? "" : "s"}` : "Optional"}
@@ -714,8 +751,8 @@ export default function AdminDealersPage() {
                   lineHeight: 1.45,
                 }}
               >
-                Salespeople will not enter manager emails manually. The internal intake flow should use
-                this saved routing configuration when the packet is submitted.
+                The CRM intake email is the working lead destination. Manager and additional routing emails
+                receive visibility so the desk can act without salespeople manually entering addresses.
               </div>
             </div>
 
@@ -808,13 +845,14 @@ export default function AdminDealersPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
                   gap: 8,
                   marginTop: 10,
                 }}
               >
+                <MiniField label="Manager route" value={managerReady ? "Ready" : "Missing"} />
+                <MiniField label="CRM delivery" value={crmReady ? "Ready" : "Missing"} />
                 <MiniField label="Billing owner" value={billingReady ? "Ready" : "Missing email"} />
-                <MiniField label="Stripe record" value={stripeReady ? "Linked" : "Not linked"} />
                 <MiniField label="Default plan" value="$595 / month" />
               </div>
 
@@ -1009,13 +1047,14 @@ export default function AdminDealersPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search dealers, slugs, emails, billing contacts, or Stripe IDs"
+              placeholder="Search dealers, slugs, CRM emails, manager emails, billing contacts, or Stripe IDs"
               style={{ ...fieldStyle(), marginTop: 12 }}
             />
 
             <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
               {filteredDealers.map((dealer) => {
                 const routingConfigured = hasEmail(dealer.lead_email);
+                const crmConfigured = hasEmail(dealer.crm_email) || routingConfigured;
                 const extraRoutingCount = countEmailList(dealer.routing_cc_emails);
                 const dealerBillingReady = hasEmail(dealer.billing_email);
                 const dealerStripeLinked = Boolean(dealer.stripe_customer_id || dealer.stripe_subscription_id);
@@ -1039,9 +1078,20 @@ export default function AdminDealersPage() {
                         <span
                           style={{
                             display: "block",
-                            color: routingConfigured ? dark : "#92400e",
+                            color: crmConfigured ? dark : "#92400e",
                             fontSize: 13,
                             marginTop: 6,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          CRM intake: {dealer.crm_email || dealer.lead_email || "Missing"}
+                        </span>
+                        <span
+                          style={{
+                            display: "block",
+                            color: routingConfigured ? dark : "#92400e",
+                            fontSize: 13,
+                            marginTop: 4,
                             overflowWrap: "anywhere",
                           }}
                         >
@@ -1053,8 +1103,11 @@ export default function AdminDealersPage() {
                         <Pill tone={dealer.is_active ? "green" : "gray"}>
                           {dealer.is_active ? "Active" : "Inactive"}
                         </Pill>
+                        <Pill tone={crmConfigured ? "green" : "amber"}>
+                          {crmConfigured ? "CRM set" : "CRM missing"}
+                        </Pill>
                         <Pill tone={routingConfigured ? "green" : "amber"}>
-                          {routingConfigured ? "Routing set" : "Routing missing"}
+                          {routingConfigured ? "Manager set" : "Manager missing"}
                         </Pill>
                         <Pill tone={dealerBillingReady ? "green" : "amber"}>
                           {dealerBillingReady ? "Billing set" : "Billing needed"}
@@ -1076,6 +1129,8 @@ export default function AdminDealersPage() {
                       <MiniField label="Customer link" value={`/${dealer.slug}`} />
                       <MiniField label="Internal link" value={`/${dealer.slug}/internal`} />
                       <MiniField label="CRM dashboard" value={`/dealer/${dealer.slug}/dashboard`} />
+                      <MiniField label="CRM intake" value={dealer.crm_email || dealer.lead_email || "Missing"} />
+                      <MiniField label="Manager route" value={dealer.lead_email || "Missing"} />
                       <MiniField
                         label="Additional routing"
                         value={extraRoutingCount ? `${extraRoutingCount} additional` : "None"}
