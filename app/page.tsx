@@ -764,12 +764,3 @@ const secondaryBtn: CSSProperties = {
   textDecoration: "none",
   border: "1px solid #e2e8f0",
 };
-
-
-const disabledSetupFeeBox: CSSProperties = {
-  ...secondaryBtn,
-  background: "#f1f5f9",
-  color: "#64748b",
-  cursor: "not-allowed",
-  opacity: 0.78,
-};
