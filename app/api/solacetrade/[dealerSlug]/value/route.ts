@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
+  buildMarketContext,
   cleanMileage,
   cleanText,
   cleanVin,
+  convertDistance,
   createSignedPhotoUrls,
   formatMoney,
   getDealerBySlug,
   logTradeEvent,
+  normalizeDistanceUnit,
   parseSolaceValue,
   SOLACETRADE_SCHEMA,
 } from "@/lib/solacetrade";
+import type { DistanceUnit } from "@/lib/solacetrade";
 
 type TradePhoto = {
   step_key: string;
@@ -24,6 +28,7 @@ type TradeIntake = {
   customer_contact: string | null;
   vin: string | null;
   mileage: number | null;
+  mileage_unit: string | null;
   mode: string | null;
   manager_notes: string | null;
   photo_paths: string[] | null;
@@ -89,8 +94,10 @@ type ExtendedSolaceValuePayload = {
   dealerReviewNotes?: string[];
   detectedVin?: string | null;
   detectedMileage?: string | number | null;
+  detectedMileageUnit?: string | null;
   vin?: string | null;
   mileage?: string | number | null;
+  mileageUnit?: string | null;
   vehicleYear?: string | number | null;
   vehicleMake?: string | null;
   vehicleModel?: string | null;
@@ -108,9 +115,11 @@ type ExtendedSolaceValuePayload = {
   make?: string | null;
   model?: string | null;
   trim?: string | null;
+  marketContext?: unknown;
   vehicle?: {
     vin?: string | null;
     mileage?: string | number | null;
+    mileageUnit?: string | null;
     year?: string | number | null;
     make?: string | null;
     model?: string | null;
@@ -297,8 +306,6 @@ function buildStructuredTrim(
   };
 }
 
-
-
 function cleanConditionScore(value: unknown) {
   const number = Number(value);
 
@@ -367,7 +374,6 @@ function requiresInspection({
   );
 }
 
-
 function getCleanStringArray(value: unknown, maxItems = 12) {
   if (!Array.isArray(value)) return [];
 
@@ -388,7 +394,7 @@ function buildExecutionAdmissibility(input: {
   missingItems?: string[];
   inspectionRequired: boolean;
   visualConditionConfidence: VisualConditionConfidence;
-}) : ExecutionAdmissibility {
+}): ExecutionAdmissibility {
   const reasons: string[] = [];
 
   if (input.photoCount < 5) {
@@ -540,6 +546,22 @@ async function decodeVehicleFromVin(vin: string): Promise<DecodedVehicle | null>
   }
 }
 
+function normalizeDetectedMileage(input: {
+  rawMileage: unknown;
+  rawUnit: unknown;
+  dealerDistanceUnit: DistanceUnit;
+}) {
+  const rawMileage = cleanMileage(input.rawMileage);
+  const rawUnit = normalizeDistanceUnit(input.rawUnit || input.dealerDistanceUnit);
+
+  return {
+    sourceMileage: rawMileage,
+    sourceMileageUnit: rawUnit,
+    displayMileage: convertDistance(rawMileage, rawUnit, input.dealerDistanceUnit),
+    displayMileageUnit: input.dealerDistanceUnit,
+  };
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -556,6 +578,7 @@ export async function POST(
 
     const { dealerSlug } = context.params;
     const dealer = await getDealerBySlug(dealerSlug);
+    const marketContext = buildMarketContext(dealer);
     const body = await request.json().catch(() => ({}));
     const intakeId = cleanText(body.intakeId, 80);
 
@@ -570,7 +593,7 @@ export async function POST(
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
       .select(
-        "id, dealer_id, customer_name, customer_contact, vin, mileage, mode, manager_notes, photo_paths"
+        "id, dealer_id, customer_name, customer_contact, vin, mileage, mileage_unit, mode, manager_notes, photo_paths"
       )
       .eq("id", intakeId)
       .eq("dealer_id", dealer.id)
@@ -630,11 +653,12 @@ You are SolaceTrade, a dealer trade-intake assistant.
 
 Your task:
 1. Read the VIN from the VIN image if visible.
-2. Read the mileage from the odometer image if visible.
-3. Review the exterior photos for visible damage and condition signals.
-4. Identify visible value-relevant option signals only.
-5. Produce a structured visual condition assessment for dealer review.
-6. Produce a conservative instant cash offer payload for dealer review.
+2. Read the odometer value from the odometer image if visible.
+3. Detect whether the odometer is in miles or kilometers if the unit is visible.
+4. Review the exterior photos for visible damage and condition signals.
+5. Identify visible value-relevant option signals only.
+6. Produce a structured visual condition assessment for dealer review.
+7. Produce a conservative instant cash offer payload for dealer review using the dealer's local valuation market.
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -662,6 +686,7 @@ Return ONLY valid JSON with this exact shape:
   "dealerReviewNotes": string[],
   "detectedVin": string | null,
   "detectedMileage": number | null,
+  "detectedMileageUnit": "mi" | "km",
   "vehicleYear": number | null,
   "vehicleMake": string | null,
   "vehicleModel": string | null,
@@ -678,6 +703,7 @@ Return ONLY valid JSON with this exact shape:
   "vehicle": {
     "vin": string | null,
     "mileage": number | null,
+    "mileageUnit": "mi" | "km",
     "year": number | null,
     "make": string | null,
     "model": string | null,
@@ -693,35 +719,41 @@ Return ONLY valid JSON with this exact shape:
   }
 }
 
+Dealer market context:
+- Dealer: ${dealer.name}
+- Location: ${dealer.city || ""}, ${dealer.state || ""} ${dealer.postal_code || ""}, ${marketContext.country}
+- Valuation market: ${marketContext.valuationMarket}
+- Offer currency: ${marketContext.currency}
+- Preferred odometer display unit: ${marketContext.distanceUnit}
+- Locale: ${marketContext.locale}
+
 Rules:
+- Offer numbers must be in ${marketContext.currency}; do not output USD for Canadian dealers unless the dealer currency is USD.
+- Adjust valuation reasoning for the dealer's local market. Alaska, Texas, Canada, and other regions should not be treated as the same market.
+- detectedMileage should be the odometer number as read from the image.
+- detectedMileageUnit must be "mi" or "km". If the image unit is unreadable, use the dealer preferred unit: ${marketContext.distanceUnit}.
 - If VIN is not visible, detectedVin must be null.
 - If mileage is not visible, detectedMileage must be null.
 - If year, make, model, trim, body class, drivetrain, engine, fuel type, doors, transmission, series, or options are not visible from the image evidence, set them to null or [] as appropriate. The server will decode stable fields from the detected VIN when possible.
 - conditionScore must be 1-5 where 5 means clean/excellent visible condition and 1 means major visible damage or severe uncertainty.
 - visualConditionConfidence must reflect photo quality, angle coverage, lighting, and whether damage can be inspected clearly.
 - damageFlags must identify only visible damage or visible concern signals. Do not invent damage. Use [] if no damage is visible.
-- For each damageFlag, panel should be specific when possible: front bumper, hood, driver door, passenger door, rear bumper, tailgate/trunk, wheel/tire, glass, light, roof, or unknown.
-- Use severity minor for small scratches/scuffs, moderate for dents/panel damage/visible paint damage, major for broken lights, missing parts, structural-looking damage, severe collision signs, or unsafe visible condition.
 - inspectionRequired should be true if photo quality is low, conditionScore <= 2, moderate/major damage is visible, or the images do not support a confident condition read.
 - Use optionSignals for visible price-impacting equipment clues from photos only, such as badging, wheel style, sunroof, panoramic roof, tow package, 4x4/AWD badge, leather, premium audio, navigation, roof rails, or driver-assist sensors.
 - Do not use optionSignals for generic facts like doors, fuel type, body class, brake type, vehicle class, hydraulic brakes, GVWR, or MPV/SUV classification.
 - Do not invent VIN, mileage, year, make, model, trim, drivetrain, engine, packages, or options.
 - If VIN or mileage cannot be read, admissibility should be PARTIAL.
-- Keep summaryLines customer-friendly.
+- Keep summaryLines customer-friendly and mention that the final value is confirmed upon inspection.
 - Keep dealerReviewNotes operational and concise.
 - The offer may be conservative and preliminary, but should be framed as an instant cash offer pending dealer verification.
 - Do not include markdown.
 - Do not include text outside JSON.
 
-Dealer:
-${dealer.name}
-${dealer.city || ""}, ${dealer.state || ""}
-
 Existing intake data:
 Customer name: ${intake.customer_name || "not provided"}
 Customer contact: ${intake.customer_contact || "not provided"}
 Manual VIN: ${intake.vin || "not provided"}
-Manual mileage: ${intake.mileage || "not provided"}
+Manual mileage: ${intake.mileage || "not provided"} ${intake.mileage_unit || marketContext.distanceUnit}
 Mode: ${intake.mode || "customer"}
 Photo manifest: ${JSON.stringify(photoManifest)}
 `.trim();
@@ -730,39 +762,13 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       { type: "text", text: prompt },
     ];
 
-    if (frontUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: frontUrl },
-      });
-    }
-
-    if (driverSideUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: driverSideUrl },
-      });
-    }
-
-    if (rearUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: rearUrl },
-      });
-    }
-
-    if (odometerUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: odometerUrl },
-      });
-    }
-
-    if (vinUrl) {
-      content.push({
-        type: "image_url",
-        image_url: { url: vinUrl },
-      });
+    for (const url of [frontUrl, driverSideUrl, rearUrl, odometerUrl, vinUrl]) {
+      if (url) {
+        content.push({
+          type: "image_url",
+          image_url: { url },
+        });
+      }
     }
 
     const response = await fetch(gatewayUrl, {
@@ -780,7 +786,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
           },
         ],
         temperature: 0.2,
-        max_tokens: 1600,
+        max_tokens: 1800,
       }),
     });
 
@@ -804,7 +810,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
 
     const rawText = extractMessageText(gatewayJson);
     const jsonText = safeJsonText(rawText);
-    const baseParsed = parseSolaceValue(jsonText);
+    const baseParsed = parseSolaceValue(jsonText, marketContext);
     let rawParsed: Partial<ExtendedSolaceValuePayload> = {};
 
     try {
@@ -826,13 +832,25 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       parsed.detectedVin || parsed.vin || parsed.vehicle?.vin || intake.vin
     );
 
-    const detectedMileage =
-      cleanMileage(
+    const mileageState = normalizeDetectedMileage({
+      rawMileage:
         parsed.detectedMileage ||
-          parsed.mileage ||
-          parsed.vehicle?.mileage ||
-          intake.mileage
-      ) || null;
+        parsed.mileage ||
+        parsed.vehicle?.mileage ||
+        intake.mileage,
+      rawUnit:
+        parsed.detectedMileageUnit ||
+        parsed.mileageUnit ||
+        parsed.vehicle?.mileageUnit ||
+        intake.mileage_unit ||
+        marketContext.distanceUnit,
+      dealerDistanceUnit: marketContext.distanceUnit,
+    });
+
+    const detectedMileage = mileageState.displayMileage;
+    const sourceMileage = mileageState.sourceMileage;
+    const sourceMileageUnit = mileageState.sourceMileageUnit;
+    const mileageUnit = mileageState.displayMileageUnit;
 
     const decodedVehicle = detectedVin
       ? await decodeVehicleFromVin(detectedVin)
@@ -920,6 +938,16 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       ? [...parsed.dealerReviewNotes]
       : [];
 
+    dealerReviewNotes.unshift(
+      `Valuation market: ${marketContext.valuationMarket}. Currency: ${marketContext.currency}. Odometer display: ${marketContext.distanceUnit}.`
+    );
+
+    if (sourceMileage && sourceMileageUnit !== mileageUnit) {
+      dealerReviewNotes.push(
+        `Odometer was read as ${sourceMileage} ${sourceMileageUnit} and normalized to ${detectedMileage} ${mileageUnit} for this dealer.`
+      );
+    }
+
     if (inspectionRequired) {
       dealerReviewNotes.push(
         "Visual condition requires dealer inspection before finalizing the offer."
@@ -948,8 +976,12 @@ Photo manifest: ${JSON.stringify(photoManifest)}
 
     const valuePayload = {
       ...parsed,
+      marketContext,
       detectedVin: detectedVin || null,
       detectedMileage,
+      detectedMileageUnit: mileageUnit,
+      sourceMileage,
+      sourceMileageUnit,
       conditionScore,
       visualConditionConfidence,
       damageFlags,
@@ -960,6 +992,10 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       dealerReviewNotes,
       vin: detectedVin || null,
       mileage: detectedMileage,
+      mileageUnit,
+      offerCurrency: marketContext.currency,
+      locale: marketContext.locale,
+      valuationMarket: marketContext.valuationMarket,
       vehicleYear,
       vehicleMake,
       vehicleModel,
@@ -986,6 +1022,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       vehicle: {
         vin: detectedVin || null,
         mileage: detectedMileage,
+        mileageUnit,
         year: vehicleYear,
         make: vehicleMake,
         model: vehicleModel,
@@ -1004,17 +1041,27 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       },
       title:
         parsed.title ||
-        `Instant cash offer: ${formatMoney(parsed.offerAmount)}`,
+        `Instant cash offer: ${formatMoney(
+          parsed.offerAmount,
+          marketContext.currency,
+          marketContext.locale
+        )}`,
     };
 
     const updatePayload = {
       status: "valued",
       vin: detectedVin || intake.vin || null,
       mileage: detectedMileage || intake.mileage || null,
-      llm_summary: valuePayload.summaryLines?.join("\n") || null,
+      mileage_unit: mileageUnit,
+      offer_currency: marketContext.currency,
+      valuation_market: marketContext.valuationMarket,
+      llm_model: getModel(),
+      llm_summary: valuePayload.summaryLines || [],
       offer_amount: valuePayload.offerAmount,
       offer_range_low: valuePayload.offerRangeLow,
       offer_range_high: valuePayload.offerRangeHigh,
+      confidence: valuePayload.confidence,
+      admissibility: valuePayload.admissibility,
       value_payload: valuePayload,
       updated_at: new Date().toISOString(),
     };
@@ -1036,8 +1083,15 @@ Photo manifest: ${JSON.stringify(photoManifest)}
       eventType: "value_created",
       payload: {
         model: getModel(),
+        marketContext,
         hasDetectedVin: Boolean(detectedVin),
         hasDetectedMileage: Boolean(detectedMileage),
+        mileage: {
+          sourceMileage,
+          sourceMileageUnit,
+          displayMileage: detectedMileage,
+          displayMileageUnit: mileageUnit,
+        },
         decodedVehicle: {
           year: vehicleYear,
           make: vehicleMake,
@@ -1056,6 +1110,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         },
         executionAdmissibility,
         offerAmount: valuePayload.offerAmount,
+        offerCurrency: marketContext.currency,
         confidence: valuePayload.confidence,
         admissibility: valuePayload.admissibility,
       },
@@ -1067,6 +1122,7 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         id: dealer.id,
         slug: dealer.slug,
         name: dealer.name,
+        marketContext,
       },
       value: valuePayload,
     });
