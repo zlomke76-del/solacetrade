@@ -1192,13 +1192,20 @@ Photo manifest: ${JSON.stringify(photoManifest)}
         admissibility: valuePayload.admissibility,
       },
     });
-return NextResponse.json({
-  intakeId: intake.id,
-  dealer: {
-    id: dealer.id,
-    slug: dealer.slug,
-    name: dealer.name,
-    marketContext,
-  },
-  value: valuePayload,
-})
+    return NextResponse.json({
+      intakeId: intake.id,
+      dealer: {
+        id: dealer.id,
+        slug: dealer.slug,
+        name: dealer.name,
+        marketContext,
+      },
+      value: valuePayload,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown value error.";
+
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
