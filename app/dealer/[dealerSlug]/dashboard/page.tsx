@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getDealerBySlug,
@@ -8,6 +9,10 @@ import {
   normalizeCurrency,
   normalizeDistanceUnit,
 } from "@/lib/solacetrade";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 type PageProps = {
   params: {
@@ -36,6 +41,7 @@ type TradeLeadRow = {
   confidence: string | null;
   admissibility: string | null;
   photo_count: number | null;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
   value_payload: Record<string, unknown> | null;
@@ -76,17 +82,46 @@ function statusColor(status: string) {
   if (status === "valued") return "#166534";
   if (status === "submitted") return "#075985";
   if (status === "scanned") return "#92400e";
-  return "#334155";
+  if (status === "new") return "#334155";
+  return "#475569";
 }
 
 function statusBackground(status: string) {
   if (status === "valued") return "#dcfce7";
   if (status === "submitted") return "#e0f2fe";
   if (status === "scanned") return "#fef3c7";
-  return "#f1f5f9";
+  if (status === "new") return "#f1f5f9";
+  return "#f8fafc";
+}
+
+function displayCustomerName(lead: TradeLeadRow) {
+  return lead.customer_name?.trim() || "New opportunity";
+}
+
+function displayCustomerContact(lead: TradeLeadRow) {
+  return (
+    lead.customer_email?.trim() ||
+    lead.customer_phone?.trim() ||
+    lead.customer_contact?.trim() ||
+    "Customer info pending"
+  );
+}
+
+function classifyOpportunity(lead: TradeLeadRow) {
+  const hasContact = Boolean(
+    lead.customer_name || lead.customer_email || lead.customer_phone || lead.customer_contact
+  );
+
+  if (lead.status === "valued" && hasContact) return "Ready deal";
+  if (lead.status === "valued") return "Valued opportunity";
+  if (hasContact) return "Active lead";
+
+  return "New opportunity";
 }
 
 export default async function DealerDashboardPage({ params }: PageProps) {
+  noStore();
+
   const dealer = await getDealerBySlug(params.dealerSlug);
 
   const { data, error } = await supabaseAdmin
@@ -114,6 +149,7 @@ export default async function DealerDashboardPage({ params }: PageProps) {
         "confidence",
         "admissibility",
         "photo_count",
+        "submitted_at",
         "created_at",
         "updated_at",
         "value_payload",
@@ -129,10 +165,13 @@ export default async function DealerDashboardPage({ params }: PageProps) {
   }
 
   const leads = data || [];
-  const totalLeads = leads.length;
-  const valuedLeads = leads.filter((lead) => lead.status === "valued").length;
-  const submittedLeads = leads.filter((lead) => lead.status === "submitted").length;
-  const scannedLeads = leads.filter((lead) => lead.status === "scanned").length;
+  const totalOpportunities = leads.length;
+  const completeScans = leads.filter((lead) => (lead.photo_count || 0) >= 5).length;
+  const valuedOpportunities = leads.filter((lead) => lead.status === "valued").length;
+  const namedLeads = leads.filter(
+    (lead) =>
+      lead.customer_name || lead.customer_email || lead.customer_phone || lead.customer_contact
+  ).length;
 
   return (
     <main
@@ -199,10 +238,10 @@ export default async function DealerDashboardPage({ params }: PageProps) {
           }}
         >
           {[
-            ["Total leads", totalLeads],
-            ["Scanned", scannedLeads],
-            ["Valued", valuedLeads],
-            ["Submitted", submittedLeads],
+            ["Opportunities", totalOpportunities],
+            ["Complete scans", completeScans],
+            ["Valued", valuedOpportunities],
+            ["Named leads", namedLeads],
           ].map(([label, value]) => (
             <div
               key={label}
@@ -253,9 +292,9 @@ export default async function DealerDashboardPage({ params }: PageProps) {
             }}
           >
             <div>
-              <h2 style={{ margin: 0, fontSize: 20 }}>Dealer leads</h2>
+              <h2 style={{ margin: 0, fontSize: 20 }}>Dealer opportunities</h2>
               <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
-                Every trade scan captured for this dealership.
+                Real-time trade scans captured for this dealership.
               </p>
             </div>
             <div
@@ -267,7 +306,7 @@ export default async function DealerDashboardPage({ params }: PageProps) {
                 letterSpacing: "0.07em",
               }}
             >
-              Dealer scoped by ID
+              Live dealer-scoped view
             </div>
           </div>
 
@@ -283,7 +322,7 @@ export default async function DealerDashboardPage({ params }: PageProps) {
               <thead>
                 <tr style={{ background: "#f8fafc", color: "#475569" }}>
                   {[
-                    "Lead",
+                    "Opportunity",
                     "Vehicle",
                     "VIN / Mileage",
                     "Offer",
@@ -321,7 +360,7 @@ export default async function DealerDashboardPage({ params }: PageProps) {
                         fontWeight: 800,
                       }}
                     >
-                      No trade leads yet.
+                      No trade opportunities yet.
                     </td>
                   </tr>
                 ) : (
@@ -331,11 +370,7 @@ export default async function DealerDashboardPage({ params }: PageProps) {
                     const unit = normalizeDistanceUnit(lead.mileage_unit);
                     const vehicleLabel =
                       getVehicleLabel(payload) || "Vehicle pending decode";
-                    const contact =
-                      lead.customer_email ||
-                      lead.customer_phone ||
-                      lead.customer_contact ||
-                      "No contact yet";
+                    const contact = displayCustomerContact(lead);
 
                     return (
                       <tr key={lead.id}>
@@ -347,27 +382,25 @@ export default async function DealerDashboardPage({ params }: PageProps) {
                           }}
                         >
                           <strong style={{ display: "block", fontSize: 14 }}>
-                            {lead.customer_name || "Unnamed lead"}
+                            {displayCustomerName(lead)}
                           </strong>
                           <span style={{ display: "block", color: "#64748b", marginTop: 3 }}>
                             {contact}
                           </span>
-                          {lead.customer_intent ? (
-                            <span
-                              style={{
-                                display: "inline-block",
-                                marginTop: 7,
-                                padding: "5px 8px",
-                                borderRadius: 999,
-                                background: "#f1f5f9",
-                                fontSize: 11,
-                                fontWeight: 900,
-                                color: "#334155",
-                              }}
-                            >
-                              {lead.customer_intent}
-                            </span>
-                          ) : null}
+                          <span
+                            style={{
+                              display: "inline-block",
+                              marginTop: 7,
+                              padding: "5px 8px",
+                              borderRadius: 999,
+                              background: "#f1f5f9",
+                              fontSize: 11,
+                              fontWeight: 900,
+                              color: "#334155",
+                            }}
+                          >
+                            {classifyOpportunity(lead)}
+                          </span>
                         </td>
 
                         <td
