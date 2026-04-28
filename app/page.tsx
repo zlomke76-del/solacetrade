@@ -22,8 +22,8 @@ export default function Page() {
           .dealer-clarity-grid { grid-template-columns: 1fr !important; }
           .dealer-signup-grid { grid-template-columns: 1fr !important; }
           .trade-flow-grid { grid-template-columns: 1fr !important; }
-          .trade-flow-grid > div[aria-hidden="true"] { display: none !important; }
-          .manager-review-card { order: 2; }
+          .manager-review-card { order: 2; position: relative !important; top: auto !important; }
+          .flow-arrow { display: none !important; }
           .scan-card-wrap { order: 1; }
         }
         @media (max-width: 620px) {
@@ -107,7 +107,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div style={{ maxWidth: 1040, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2 }}>
           <div
             style={{
               display: "inline-flex",
@@ -259,9 +259,9 @@ export default function Page() {
           </p>
         </div>
 
-        <div className="trade-flow-grid" style={tradeFlowGrid}>
-          <div aria-hidden="true" style={flowArrow}>→</div>
-          <div className="scan-card-wrap" style={scanColumn}>
+        <div style={tradeFlowShell}>
+          <div className="trade-flow-grid" style={tradeFlowGrid}>
+            <div className="scan-card-wrap" style={scanColumn}>
             <div
               style={{
                 padding: 12,
@@ -318,7 +318,12 @@ export default function Page() {
                 <span>Delivered to your manager workflow</span>
               </div>
             </div>
-          </aside>
+            </aside>
+          </div>
+
+          <div className="flow-arrow" style={flowArrow} aria-hidden="true">
+            →
+          </div>
         </div>
 
         <div style={dealerPacketBar}>
@@ -519,10 +524,10 @@ export default function Page() {
 
 const heroVehicleArt: CSSProperties = {
   position: "absolute",
-  top: 24,
-  width: "min(25vw, 360px)",
-  minWidth: 250,
-  height: 300,
+  top: 40,
+  width: "min(22vw, 300px)",
+  minWidth: 235,
+  height: 260,
   borderRadius: 34,
   overflow: "hidden",
   background: "#0f172a",
@@ -591,33 +596,38 @@ const vehicleArtOverlay: CSSProperties = {
   boxShadow: "0 16px 34px rgba(0,0,0,0.26)",
 };
 
+const tradeFlowShell: CSSProperties = {
+  position: "relative",
+};
+
 const tradeFlowGrid: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   justifyContent: "center",
   alignItems: "start",
-  gap: 24,
-  position: "relative",
+  gap: 20,
 };
 
 const flowArrow: CSSProperties = {
   position: "absolute",
   left: "50%",
-  top: "42%",
+  top: "50%",
   transform: "translate(-50%, -50%)",
   width: 38,
   height: 38,
   borderRadius: 999,
-  display: "inline-flex",
+  display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background: "white",
   border: "1px solid #fecaca",
   color: "#b91c1c",
-  fontSize: 22,
-  fontWeight: 950,
-  boxShadow: "0 16px 36px rgba(15,23,42,0.12)",
-  zIndex: 4,
+  fontSize: 24,
+  fontWeight: 900,
+  opacity: 0.9,
+  pointerEvents: "none",
+  boxShadow: "0 16px 38px rgba(185,28,28,0.18)",
+  zIndex: 3,
 };
 
 const scanColumn: CSSProperties = {
@@ -685,7 +695,7 @@ const managerImageShell: CSSProperties = {
   overflow: "hidden",
   border: "1px solid #cbd5e1",
   background: "#0f172a",
-  boxShadow: "0 18px 42px rgba(15,23,42,0.16)",
+  boxShadow: "0 22px 54px rgba(15,23,42,0.2)",
 };
 
 const managerReviewImage: CSSProperties = {
@@ -725,7 +735,7 @@ const managerBulletCheck: CSSProperties = {
 };
 
 const dealerPacketBar: CSSProperties = {
-  maxWidth: 1160,
+  maxWidth: 760,
   margin: "16px auto 0",
   padding: 14,
   borderRadius: 24,
