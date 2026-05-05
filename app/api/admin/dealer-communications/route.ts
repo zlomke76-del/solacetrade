@@ -54,15 +54,15 @@ function makeError(error: unknown, fallback: string) {
   return fallback;
 }
 
-function getReplyToEmail(dealer: {
+function getReplyToEmail(dealer?: {
   lead_email?: string | null;
   crm_email?: string | null;
   billing_email?: string | null;
-}) {
+} | null) {
   return (
-    dealer.crm_email ||
-    dealer.lead_email ||
-    dealer.billing_email ||
+    dealer?.crm_email ||
+    dealer?.lead_email ||
+    dealer?.billing_email ||
     DEFAULT_REPLY_TO_EMAIL
   );
 }
@@ -156,10 +156,6 @@ export async function POST(req: Request) {
     const ccEmails = splitEmailList(payload.cc_emails).map((email) => email.toLowerCase());
     const marketingStage = normalizeOptionalText(payload.marketing_stage) || "general";
 
-    if (!dealerId) {
-      return NextResponse.json({ error: "Missing dealer_id." }, { status: 400 });
-    }
-
     if (!subject) {
       return NextResponse.json({ error: "Subject is required." }, { status: 400 });
     }
@@ -182,7 +178,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const dealer = await getDealer(dealerId);
+    const dealer = dealerId ? await getDealer(dealerId) : null;
     const now = new Date().toISOString();
     const replyToEmail = getReplyToEmail(dealer);
 
@@ -223,9 +219,9 @@ export async function POST(req: Request) {
       .schema("solacetrade")
       .from("dealer_communications")
       .insert({
-        dealer_id: dealer.id,
-        dealer_slug: dealer.slug,
-        dealer_name: dealer.name,
+        dealer_id: dealer?.id || null,
+        dealer_slug: dealer?.slug || null,
+        dealer_name: dealer?.name || "Direct Outreach",
         direction,
         status,
         from_email: direction === "outbound" ? DEFAULT_FROM_EMAIL : fromEmail,
