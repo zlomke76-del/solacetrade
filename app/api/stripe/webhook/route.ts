@@ -67,7 +67,9 @@ function buildDealerSlug(input: {
   const fromName = normalizeDealerSlug(input.dealerName.replace(/\s+/g, "-"));
   if (fromName) return fromName;
 
-  const customerSuffix = input.customerId ? input.customerId.slice(-8).toLowerCase() : "dealer";
+  const customerSuffix = input.customerId
+    ? input.customerId.slice(-8).toLowerCase()
+    : "dealer";
   return `dealer-${customerSuffix}`;
 }
 
@@ -94,11 +96,40 @@ async function makeUniqueDealerSlug(baseSlug: string) {
   return `${safeBase}-${Date.now()}`;
 }
 
+async function upsertDealerUser(input: {
+  dealerId: string;
+  email: string | null | undefined;
+  role?: "owner" | "manager" | "viewer";
+  status?: "pending" | "active" | "revoked";
+}) {
+  const email = normalizeEmail(input.email || "");
+  if (!email) return;
+
+  const { error } = await supabaseAdmin
+    .schema(SOLACETRADE_SCHEMA)
+    .from("dealer_users")
+    .upsert(
+      {
+        dealer_id: input.dealerId,
+        email,
+        role: input.role || "owner",
+        status: input.status || "active",
+      },
+      { onConflict: "dealer_id,email" },
+    );
+
+  if (error) {
+    throw new Error(`Dealer user authorization failed: ${error.message}`);
+  }
+}
+
 async function updateDealerBySubscription(subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealer_id;
   const dealerSlug = subscription.metadata?.dealer_slug;
   const customerId = getStringId(subscription.customer as string | Stripe.Customer);
   const priceId = subscription.items.data[0]?.price?.id || null;
+  const isSubscriptionActive =
+    subscription.status === "active" || subscription.status === "trialing";
 
   const payload = {
     stripe_customer_id: customerId,
@@ -109,13 +140,15 @@ async function updateDealerBySubscription(subscription: Stripe.Subscription) {
       ? new Date(subscription.current_period_end * 1000).toISOString()
       : null,
     billing_cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-    is_active: subscription.status === "active" || subscription.status === "trialing",
+    is_active: isSubscriptionActive,
   };
 
   let query = supabaseAdmin
     .schema(SOLACETRADE_SCHEMA)
     .from("dealers")
-    .update(payload);
+    .update(payload)
+    .select("id, slug, name, billing_email, lead_email")
+    .limit(1);
 
   if (dealerId) {
     query = query.eq("id", dealerId);
@@ -127,9 +160,19 @@ async function updateDealerBySubscription(subscription: Stripe.Subscription) {
     return;
   }
 
-  const { error } = await query;
+  const { data, error } = await query;
   if (error) {
     throw new Error(`Subscription dealer update failed: ${error.message}`);
+  }
+
+  const dealer = (data?.[0] || null) as DealerEmailRecord | null;
+  if (dealer?.lead_email && isSubscriptionActive) {
+    await upsertDealerUser({
+      dealerId: dealer.id,
+      email: dealer.lead_email,
+      role: "owner",
+      status: "active",
+    });
   }
 }
 
@@ -200,9 +243,15 @@ async function createDealerFromCheckout(input: {
     sales_phone: salesPhone || null,
     lead_email: managerEmail || billingEmail || "onboarding@solacetrade.ai",
     routing_cc_emails: [],
-    billing_contact_name: cleanText(metadata.billing_contact_name || input.session.customer_details?.name || dealerName, 180) || null,
+    billing_contact_name:
+      cleanText(
+        metadata.billing_contact_name || input.session.customer_details?.name || dealerName,
+        180,
+      ) || null,
     billing_email: billingEmail || null,
-    billing_phone: cleanText(metadata.billing_phone || input.session.customer_details?.phone || "", 80) || null,
+    billing_phone:
+      cleanText(metadata.billing_phone || input.session.customer_details?.phone || "", 80) ||
+      null,
     address_line: cleanText(metadata.address_line || address?.line1 || "", 220) || null,
     city: cleanText(metadata.city || address?.city || "", 120) || null,
     state: cleanText(metadata.state || address?.state || "", 40) || null,
@@ -294,6 +343,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     });
   }
 
+  await upsertDealerUser({
+    dealerId: dealer.id,
+    email: dealer.lead_email,
+    role: "owner",
+    status: "active",
+  });
+
   await sendDealerOnboardingEmail({
     dealerName: dealer.name,
     dealerSlug: dealer.slug,
@@ -318,14 +374,26 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     .update({
       billing_status: "active",
       is_active: true,
-    });
+    })
+    .select("id, slug, name, billing_email, lead_email")
+    .limit(1);
 
   if (subscriptionId) query = query.eq("stripe_subscription_id", subscriptionId);
   else if (customerId) query = query.eq("stripe_customer_id", customerId);
 
-  const { error } = await query;
+  const { data, error } = await query;
   if (error) {
     throw new Error(`Invoice success dealer update failed: ${error.message}`);
+  }
+
+  const dealer = (data?.[0] || null) as DealerEmailRecord | null;
+  if (dealer?.lead_email) {
+    await upsertDealerUser({
+      dealerId: dealer.id,
+      email: dealer.lead_email,
+      role: "owner",
+      status: "active",
+    });
   }
 }
 
