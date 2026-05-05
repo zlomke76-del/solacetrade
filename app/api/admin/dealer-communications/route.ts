@@ -21,7 +21,7 @@ type DealerCommunicationPayload = {
 const DEFAULT_FROM_EMAIL =
   process.env.TRADEDESK_MARKETING_FROM_EMAIL ||
   process.env.SOLACETRADE_MARKETING_FROM_EMAIL ||
-  "TradeDesk by Solace <team@moralclarity.ai>";
+  "SolaceTrade <team@solacetrade.ai>";
 
 function splitEmailList(value: string[] | string | null | undefined) {
   if (!value) return [];
