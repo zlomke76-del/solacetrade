@@ -3,6 +3,12 @@
 import TradeDesk from "../components/TradeDesk";
 import type { CSSProperties } from "react";
 
+const DEMO_DEALER_SLUG = "jerseyvillagecdjr";
+const DEMO_DEALER_NAME = "Jersey Village Chrysler Jeep Dodge Ram";
+const DEMO_BRAND_COLOR = "#b91c1c";
+const DEMO_MANAGER_EMAIL = "manager@dealer.com";
+const DEMO_INTERNAL_ACCESS_KEY = "demo-internal-preview";
+
 export default function Page() {
   return (
     <main
@@ -72,7 +78,10 @@ export default function Page() {
         <strong className="dealer-name" style={{ fontSize: 14 }}>
           Jersey Village Chrysler Jeep Dodge Ram
         </strong>
-        <nav className="top-nav" style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}>
+        <nav
+          className="top-nav"
+          style={{ display: "flex", gap: 16, fontSize: 13, fontWeight: 900 }}
+        >
           <span>New</span>
           <span>Used</span>
           <span>Service</span>
@@ -90,8 +99,15 @@ export default function Page() {
           textAlign: "center",
         }}
       >
-        <div className="hero-vehicle-art" style={{ ...heroVehicleArt, left: 24 }}>
-          <img src="/images/jeep_01.png" alt="Baja-style Jeep on sand dunes" style={heroVehicleImage} />
+        <div
+          className="hero-vehicle-art"
+          style={{ ...heroVehicleArt, left: 24 }}
+        >
+          <img
+            src="/images/jeep_01.png"
+            alt="Baja-style Jeep on sand dunes"
+            style={heroVehicleImage}
+          />
           <div style={inventoryTopBadge}>
             <strong style={inventoryTopTitle}>New Jeep Inventory</strong>
             <span style={inventoryTopAction}>View all</span>
@@ -102,8 +118,15 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="hero-vehicle-art" style={{ ...heroVehicleArt, right: 24 }}>
-          <img src="/images/ram_truck_01.png" alt="Lifted Ram truck on a mountain dirt road" style={heroVehicleImage} />
+        <div
+          className="hero-vehicle-art"
+          style={{ ...heroVehicleArt, right: 24 }}
+        >
+          <img
+            src="/images/ram_truck_01.png"
+            alt="Lifted Ram truck on a mountain dirt road"
+            style={heroVehicleImage}
+          />
           <div style={inventoryTopBadge}>
             <strong style={inventoryTopTitle}>New Ram Inventory</strong>
             <span style={inventoryTopAction}>View all</span>
@@ -114,7 +137,15 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="hero-copy-wrap" style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div
+          className="hero-copy-wrap"
+          style={{
+            maxWidth: 900,
+            margin: "0 auto",
+            position: "relative",
+            zIndex: 2,
+          }}
+        >
           <div style={eyebrowRed}>TradeDesk by Solace</div>
 
           <h1
@@ -130,11 +161,26 @@ export default function Page() {
             Real offer in seconds. No games.
           </h1>
 
-          <p style={{ margin: "0 auto 6px", maxWidth: 620, color: "#0f172a", fontSize: "clamp(16px, 2.2vw, 20px)", fontWeight: 700 }}>
+          <p
+            style={{
+              margin: "0 auto 6px",
+              maxWidth: 620,
+              color: "#0f172a",
+              fontSize: "clamp(16px, 2.2vw, 20px)",
+              fontWeight: 700,
+            }}
+          >
             Built from your actual vehicle — not a guess.
           </p>
 
-          <p style={{ margin: "0 auto 14px", color: "#64748b", fontSize: 14, fontWeight: 600 }}>
+          <p
+            style={{
+              margin: "0 auto 14px",
+              color: "#64748b",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
             Scan your car. See your offer instantly.
           </p>
 
@@ -142,26 +188,65 @@ export default function Page() {
             Get My Real Offer
           </a>
 
-          <p style={{ margin: "10px auto 0", color: "#64748b", fontSize: 12, fontWeight: 700 }}>
+          <p
+            style={{
+              margin: "10px auto 0",
+              color: "#64748b",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
             Final value confirmed upon inspection.
           </p>
 
-          <p style={{ margin: "14px auto 0", color: "#334155", fontSize: 12, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          <p
+            style={{
+              margin: "14px auto 0",
+              color: "#334155",
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
             Trade value first. Inventory next. One clean path.
           </p>
         </div>
       </section>
 
-      <section id="vehicle-scan" className="vehicle-scan-section" style={{ maxWidth: 1160, margin: "0 auto", padding: "0 14px 34px" }}>
+      <section
+        id="vehicle-scan"
+        className="vehicle-scan-section"
+        style={{ maxWidth: 1160, margin: "0 auto", padding: "0 14px 34px" }}
+      >
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={dealerGetsBadge}>This is what the dealer gets</div>
 
-          <h2 style={{ margin: "0 auto 6px", color: "#0f172a", fontSize: "clamp(22px, 3vw, 30px)", lineHeight: 1.08, letterSpacing: "-0.04em" }}>
+          <h2
+            style={{
+              margin: "0 auto 6px",
+              color: "#0f172a",
+              fontSize: "clamp(22px, 3vw, 30px)",
+              lineHeight: 1.08,
+              letterSpacing: "-0.04em",
+            }}
+          >
             From scan to desk — one clean flow.
           </h2>
 
-          <p style={{ margin: "0 auto", maxWidth: 680, color: "#475569", fontSize: 14, fontWeight: 700, lineHeight: 1.45 }}>
-            Customers scan their vehicle, receive a real offer response, and your team gets a manager-ready review packet backed by real vehicle data.
+          <p
+            style={{
+              margin: "0 auto",
+              maxWidth: 680,
+              color: "#475569",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.45,
+            }}
+          >
+            Customers scan their vehicle, receive a real offer response, and
+            your team gets a manager-ready review packet backed by real vehicle
+            data.
           </p>
         </div>
 
@@ -170,14 +255,22 @@ export default function Page() {
             <div className="scan-card-wrap" style={scanColumn}>
               <div style={scanOuterCard}>
                 <div style={scanInnerCard}>
-                  <TradeDesk mode="customer" dealerSlug="jerseyvillagecdjr" />
+                  <TradeDesk mode="customer" dealerSlug={DEMO_DEALER_SLUG} />
                 </div>
               </div>
 
               <div style={dealerPacketBar}>
-                <div className="dealer-packet-header" style={dealerPacketHeader}>
-                  <span style={dealerPacketEyebrow}>Dealer-ready trade packet</span>
-                  <strong className="dealer-packet-title" style={dealerPacketTitle}>
+                <div
+                  className="dealer-packet-header"
+                  style={dealerPacketHeader}
+                >
+                  <span style={dealerPacketEyebrow}>
+                    Dealer-ready trade packet
+                  </span>
+                  <strong
+                    className="dealer-packet-title"
+                    style={dealerPacketTitle}
+                  >
                     Everything your team needs to work the deal faster.
                   </strong>
                 </div>
@@ -185,18 +278,31 @@ export default function Page() {
                 <div className="dealer-clarity-grid" style={dealerPacketGrid}>
                   <div style={dealerPacketItem}>
                     <span style={dealerPacketIcon}>01</span>
-                    <strong style={dealerClarityTitle}>Live on your site</strong>
-                    <span style={dealerClarityBody}>Trade capture stays branded to the dealership.</span>
+                    <strong style={dealerClarityTitle}>
+                      Live on your site
+                    </strong>
+                    <span style={dealerClarityBody}>
+                      Trade capture stays branded to the dealership.
+                    </span>
                   </div>
                   <div style={dealerPacketItem}>
                     <span style={dealerPacketIcon}>02</span>
-                    <strong style={dealerClarityTitle}>Real vehicle evidence</strong>
-                    <span style={dealerClarityBody}>Photos, VIN, mileage, and condition signals.</span>
+                    <strong style={dealerClarityTitle}>
+                      Real vehicle evidence
+                    </strong>
+                    <span style={dealerClarityBody}>
+                      Photos, VIN, mileage, and condition signals.
+                    </span>
                   </div>
                   <div style={dealerPacketItem}>
                     <span style={dealerPacketIcon}>03</span>
-                    <strong style={dealerClarityTitle}>Immediate next step</strong>
-                    <span style={dealerClarityBody}>Customer gets a clean answer while your desk keeps final inspection control.</span>
+                    <strong style={dealerClarityTitle}>
+                      Immediate next step
+                    </strong>
+                    <span style={dealerClarityBody}>
+                      Customer gets a clean answer while your desk keeps final
+                      inspection control.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -204,52 +310,130 @@ export default function Page() {
 
             <aside className="manager-review-card" style={managerReviewCard}>
               <div style={managerReviewTopline}>
-                <span style={managerReviewBadge}>Step 2</span>
-                <span style={managerReviewStatus}>Manager packet</span>
+                <span style={managerReviewBadge}>Live internal desk</span>
+                <span style={managerReviewStatus}>Staff intake</span>
               </div>
 
-              <h3 style={managerReviewTitle}>Manager review — ready instantly.</h3>
-              <p style={managerReviewCopy}>Ready for your desk the moment the scan is complete.</p>
+              <h3 style={managerReviewTitle}>
+                Manager review — ready instantly.
+              </h3>
+              <p style={managerReviewCopy}>
+                This is the live internal TradeDesk your sales team can use from
+                an internal website, CRM shortcut, or pinned tablet link.
+              </p>
 
-              <div style={managerImageShell}>
-                <img src="/images/manager_review_01.png" alt="Manager review packet screen" style={managerReviewImage} />
+              <div style={liveInternalDeskShell}>
+                <TradeDesk
+                  mode="internal"
+                  dealerSlug={DEMO_DEALER_SLUG}
+                  dealerName={DEMO_DEALER_NAME}
+                  brandColor={DEMO_BRAND_COLOR}
+                  managerEmail={DEMO_MANAGER_EMAIL}
+                  routingCcEmails={[]}
+                  internalAccessKey={DEMO_INTERNAL_ACCESS_KEY}
+                />
               </div>
 
               <div style={managerBullets}>
                 <div style={managerBulletItem}>
                   <span style={managerBulletCheck}>✓</span>
-                  <span>VIN, mileage, and photos pre-filled</span>
+                  <span>
+                    Sales staff can create manager packets without CRM access.
+                  </span>
                 </div>
                 <div style={managerBulletItem}>
                   <span style={managerBulletCheck}>✓</span>
-                  <span>Trim and options decoded</span>
+                  <span>
+                    VIN, mileage, condition photos, and deal context route to
+                    the desk.
+                  </span>
                 </div>
                 <div style={managerBulletItem}>
                   <span style={managerBulletCheck}>✓</span>
-                  <span>Delivered to your manager workflow</span>
+                  <span>Dealer keeps final inspection and offer control.</span>
                 </div>
               </div>
             </aside>
           </div>
 
-          <div className="flow-arrow" style={flowArrow} aria-hidden="true">→</div>
+          <div className="flow-arrow" style={flowArrow} aria-hidden="true">
+            →
+          </div>
+        </div>
+
+        <div style={dashboardPreviewSection}>
+          <div style={dashboardPreviewHeader}>
+            <div>
+              <span style={dashboardPreviewEyebrow}>Live CRM projection</span>
+              <h3 style={dashboardPreviewTitle}>
+                Watch the dashboard update below.
+              </h3>
+              <p style={dashboardPreviewCopy}>
+                The customer scan and internal sales intake both feed the live
+                dealer-scoped dashboard. This preview lets dealers see the
+                operational result without leaving the demo page.
+              </p>
+            </div>
+            <a
+              href={`/dealer/${DEMO_DEALER_SLUG}/dashboard`}
+              target="_blank"
+              rel="noreferrer"
+              style={dashboardPreviewLink}
+            >
+              Open full dashboard
+            </a>
+          </div>
+
+          <div style={dashboardFrameShell}>
+            <iframe
+              title="Live SolaceTrade dealer dashboard preview"
+              src={`/dealer/${DEMO_DEALER_SLUG}/dashboard`}
+              style={dashboardFrame}
+            />
+          </div>
         </div>
       </section>
 
-      <section style={{ padding: "42px 18px", background: "#0f172a", color: "white" }}>
+      <section
+        style={{ padding: "42px 18px", background: "#0f172a", color: "white" }}
+      >
         <div className="dealer-signup-grid" style={dealerSignupGrid}>
           <div style={dealerSignupCopyCard}>
             <div style={dealerSignupBadge}>Dealer Signup</div>
 
-            <h2 style={{ margin: 0, fontSize: "clamp(30px, 4vw, 44px)", lineHeight: 0.96, letterSpacing: "-0.055em" }}>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "clamp(30px, 4vw, 44px)",
+                lineHeight: 0.96,
+                letterSpacing: "-0.055em",
+              }}
+            >
               Turn your trade page into a real intake engine.
             </h2>
 
-            <p style={{ margin: "14px 0 0", color: "#dbeafe", fontSize: 15, lineHeight: 1.55, fontWeight: 700 }}>
-              TradeDesk gives your dealership a branded scan flow, structured vehicle evidence, and a faster path from customer interest to workable offer.
+            <p
+              style={{
+                margin: "14px 0 0",
+                color: "#dbeafe",
+                fontSize: 15,
+                lineHeight: 1.55,
+                fontWeight: 700,
+              }}
+            >
+              TradeDesk gives your dealership a branded scan flow, structured
+              vehicle evidence, and a faster path from customer interest to
+              workable offer.
             </p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 18,
+              }}
+            >
               <span style={darkPill}>Website-ready</span>
               <span style={darkPill}>Evidence-based</span>
               <span style={darkPill}>Dealer-controlled</span>
@@ -259,10 +443,21 @@ export default function Page() {
           <div style={dealerAccessCard}>
             <div style={liveBadge}>Live</div>
 
-            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Dealer Access</h3>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>
+              Dealer Access
+            </h3>
 
-            <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45, maxWidth: 330 }}>
-              Fill out the setup form first. We build your dealer record, then send you to secure checkout.
+            <p
+              style={{
+                margin: "6px 0 16px",
+                color: "#64748b",
+                fontSize: 13,
+                lineHeight: 1.45,
+                maxWidth: 330,
+              }}
+            >
+              Fill out the setup form first. We build your dealer record, then
+              send you to secure checkout.
             </p>
 
             <a href="/signup" style={primaryBtn}>
@@ -279,14 +474,31 @@ export default function Page() {
               </div>
             </div>
 
-            <p style={{ fontSize: 12, color: "#64748b", margin: "14px 0 0", lineHeight: 1.45 }}>
-              Dealers complete setup first. The $299 setup fee is waived for subscriptions started before July 1.
+            <p
+              style={{
+                fontSize: 12,
+                color: "#64748b",
+                margin: "14px 0 0",
+                lineHeight: 1.45,
+              }}
+            >
+              Dealers complete setup first. The $299 setup fee is waived for
+              subscriptions started before July 1.
             </p>
           </div>
         </div>
       </section>
 
-      <footer style={{ padding: 22, background: "#0b0b0b", color: "white", textAlign: "center", fontSize: 13, fontWeight: 800 }}>
+      <footer
+        style={{
+          padding: 22,
+          background: "#0b0b0b",
+          color: "white",
+          textAlign: "center",
+          fontSize: 13,
+          fontWeight: 800,
+        }}
+      >
         Jersey Village CDJR • Powered by TradeDesk by Solace
       </footer>
     </main>
@@ -342,7 +554,8 @@ const scanOuterCard: CSSProperties = {
   padding: 12,
   borderRadius: 30,
   border: "2px solid #b91c1c",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))",
   boxShadow: "0 28px 80px rgba(15,23,42,0.16)",
 };
 
@@ -365,7 +578,8 @@ const dealerSignupGrid: CSSProperties = {
 const dealerSignupCopyCard: CSSProperties = {
   padding: 24,
   borderRadius: 22,
-  background: "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))",
+  background:
+    "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))",
   border: "1px solid rgba(255,255,255,0.12)",
   boxShadow: "0 24px 70px rgba(0,0,0,0.28)",
 };
@@ -415,7 +629,6 @@ const waiverBadge: CSSProperties = {
   display: "inline-block",
   marginBottom: 8,
 };
-
 
 const heroVehicleArt: CSSProperties = {
   position: "absolute",
@@ -583,6 +796,94 @@ const managerReviewCopy: CSSProperties = {
   fontSize: 14,
   fontWeight: 750,
   lineHeight: 1.45,
+};
+
+const liveInternalDeskShell: CSSProperties = {
+  borderRadius: 22,
+  overflow: "hidden",
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  boxShadow: "0 22px 54px rgba(15,23,42,0.16)",
+  maxHeight: 620,
+  overflowY: "auto",
+};
+
+const dashboardPreviewSection: CSSProperties = {
+  marginTop: 22,
+  padding: 18,
+  borderRadius: 30,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 28px 80px rgba(15,23,42,0.12)",
+};
+
+const dashboardPreviewHeader: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 14,
+  flexWrap: "wrap",
+  marginBottom: 14,
+};
+
+const dashboardPreviewEyebrow: CSSProperties = {
+  display: "inline-flex",
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#e0f2fe",
+  color: "#075985",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  marginBottom: 8,
+};
+
+const dashboardPreviewTitle: CSSProperties = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: "clamp(22px, 2.6vw, 30px)",
+  lineHeight: 1,
+  letterSpacing: "-0.045em",
+};
+
+const dashboardPreviewCopy: CSSProperties = {
+  margin: "7px 0 0",
+  color: "#475569",
+  fontSize: 13,
+  fontWeight: 750,
+  lineHeight: 1.45,
+  maxWidth: 690,
+};
+
+const dashboardPreviewLink: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 13px",
+  borderRadius: 999,
+  background: "#0f172a",
+  color: "white",
+  fontSize: 12,
+  fontWeight: 950,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const dashboardFrameShell: CSSProperties = {
+  borderRadius: 24,
+  overflow: "hidden",
+  border: "1px solid #cbd5e1",
+  background: "#0f172a",
+  boxShadow: "0 22px 54px rgba(15,23,42,0.18)",
+};
+
+const dashboardFrame: CSSProperties = {
+  display: "block",
+  width: "100%",
+  height: 520,
+  border: 0,
+  background: "white",
 };
 
 const managerImageShell: CSSProperties = {
@@ -757,7 +1058,6 @@ const secondaryBtn: CSSProperties = {
   textDecoration: "none",
   border: "1px solid #e2e8f0",
 };
-
 
 const disabledSetupFeeBox: CSSProperties = {
   ...secondaryBtn,
