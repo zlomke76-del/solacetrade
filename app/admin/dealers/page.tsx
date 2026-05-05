@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 type Dealer = {
@@ -333,7 +334,7 @@ function Pill({
   children,
   tone,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tone: "green" | "gray" | "amber" | "blue" | "red";
 }) {
   const styles: Record<typeof tone, CSSProperties> = {
