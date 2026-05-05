@@ -77,6 +77,18 @@ async function getUploadedSteps(input: { dealerId: string; intakeId: string }) {
   };
 }
 
+async function getDealerInternalAccessKey(dealerId: string) {
+  const { data, error } = await supabaseAdmin
+    .schema(SOLACETRADE_SCHEMA)
+    .from("dealers")
+    .select("internal_access_key")
+    .eq("id", dealerId)
+    .maybeSingle<{ internal_access_key: string | null }>();
+
+  if (error) throw new Error(error.message);
+  return data?.internal_access_key || "";
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string; intakeId: string } }
@@ -93,10 +105,10 @@ export async function POST(
     const { data: intake, error: intakeError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
       .from("trade_intakes")
-      .select("id, dealer_id")
+      .select("id, dealer_id, mode")
       .eq("id", cleanIntakeId)
       .eq("dealer_id", dealer.id)
-      .single();
+      .single<{ id: string; dealer_id: string; mode: string }>();
 
     if (intakeError || !intake) {
       return NextResponse.json(
@@ -106,6 +118,22 @@ export async function POST(
     }
 
     const formData = await request.formData();
+
+    if (intake.mode === "internal") {
+      const submittedKey = cleanText(
+        formData.get("internalAccessKey") || request.headers.get("x-solacetrade-internal-key") || "",
+        120
+      );
+      const expectedKey = await getDealerInternalAccessKey(dealer.id);
+
+      if (!expectedKey || submittedKey !== expectedKey) {
+        return NextResponse.json(
+          { error: "Internal TradeDesk access is not authorized." },
+          { status: 403 }
+        );
+      }
+    }
+
     const stepKey = cleanText(formData.get("stepKey"), 40);
     const candidate = formData.get("photo");
 
@@ -200,6 +228,7 @@ export async function POST(
         photoCount: uploaded.photoCount,
         uploadedSteps: uploaded.uploadedSteps,
         streamingUpload: true,
+        access: intake.mode === "internal" ? "dealer_internal_key" : "public_customer",
       },
     });
 
