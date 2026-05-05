@@ -15,6 +15,8 @@ type ExistingOutbound = {
   from_email: string;
   subject: string;
   marketing_stage: string | null;
+  thread_key: string | null;
+  contact_email: string | null;
   created_at: string | null;
   sent_at: string | null;
 };
@@ -86,6 +88,18 @@ function extractFirstEmail(value: unknown): string {
   return extractEmail(value);
 }
 
+function normalizeThreadSubject(value: string) {
+  return String(value || "No subject")
+    .replace(/^\s*((re|fw|fwd):\s*)+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase() || "no subject";
+}
+
+function buildThreadKey(input: { contactEmail: string; subject: string }) {
+  return `${input.contactEmail.toLowerCase()}::${normalizeThreadSubject(input.subject)}`;
+}
+
 function getPayloadRoot(raw: AnyObject) {
   const data = asObject(raw.data);
   return Object.keys(data).length ? data : raw;
@@ -98,7 +112,7 @@ function getProviderMessageId(raw: AnyObject, root: AnyObject) {
     asString(root.message_id) ||
     asString(root.messageId) ||
     asString(asObject(root.headers)["message-id"]) ||
-    asString(asObject(raw).id) ||
+    asString(raw.id) ||
     null
   );
 }
@@ -186,7 +200,7 @@ async function findLatestOutboundForContact(email: string) {
     .schema(SOLACETRADE_SCHEMA)
     .from("dealer_communications")
     .select(
-      "id,dealer_id,dealer_slug,dealer_name,to_email,from_email,subject,marketing_stage,created_at,sent_at",
+      "id,dealer_id,dealer_slug,dealer_name,to_email,from_email,subject,marketing_stage,thread_key,contact_email,created_at,sent_at",
     )
     .eq("direction", "outbound")
     .eq("to_email", email.toLowerCase())
@@ -249,6 +263,9 @@ export async function POST(req: NextRequest) {
     const contact = await ensureContact(fromEmail);
     const latestOutbound = await findLatestOutboundForContact(fromEmail);
     const repliedSendIds = await markMatchingMarketingSendsReplied(fromEmail);
+    const threadKey =
+      latestOutbound?.thread_key ||
+      buildThreadKey({ contactEmail: fromEmail, subject });
 
     const { data: inserted, error: insertError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
@@ -267,8 +284,10 @@ export async function POST(req: NextRequest) {
         marketing_stage: latestOutbound?.marketing_stage || "reply",
         provider: "resend",
         provider_message_id: providerMessageId,
+        thread_key: threadKey,
+        contact_email: fromEmail,
+        reply_to_message_id: latestOutbound?.id || null,
         received_at: now,
-        created_at: now,
         metadata: {
           event_type: eventType,
           contact_id: contact?.id || null,
@@ -277,6 +296,11 @@ export async function POST(req: NextRequest) {
           replied_marketing_send_ids: repliedSendIds,
           inbound_to: toEmail,
           raw_event_type: eventType,
+          conversation: {
+            thread_key: threadKey,
+            contact_email: fromEmail,
+            reply_to_message_id: latestOutbound?.id || null,
+          },
         },
       })
       .select("*")
@@ -290,6 +314,7 @@ export async function POST(req: NextRequest) {
       contact,
       matchedOutboundId: latestOutbound?.id || null,
       repliedSendIds,
+      threadKey,
     });
   } catch (error) {
     return NextResponse.json(
