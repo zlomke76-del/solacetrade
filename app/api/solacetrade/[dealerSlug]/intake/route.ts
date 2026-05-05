@@ -14,6 +14,28 @@ function normalizeMode(value: unknown): TradeDeskMode {
   return cleanText(value, 20) === "internal" ? "internal" : "customer";
 }
 
+function getSubmittedInternalKey(body: Record<string, unknown>, request: NextRequest) {
+  return cleanText(
+    body.internalAccessKey ||
+      body.internal_access_key ||
+      request.headers.get("x-solacetrade-internal-key") ||
+      "",
+    120
+  );
+}
+
+async function getDealerInternalAccessKey(dealerId: string) {
+  const { data, error } = await supabaseAdmin
+    .schema(SOLACETRADE_SCHEMA)
+    .from("dealers")
+    .select("internal_access_key")
+    .eq("id", dealerId)
+    .maybeSingle<{ internal_access_key: string | null }>();
+
+  if (error) throw new Error(error.message);
+  return data?.internal_access_key || "";
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -23,8 +45,20 @@ export async function POST(
     const dealer = await getDealerBySlug(dealerSlug);
     const marketContext = buildMarketContext(dealer);
 
-    const body = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const mode = normalizeMode(body.mode);
+
+    if (mode === "internal") {
+      const submittedKey = getSubmittedInternalKey(body, request);
+      const expectedKey = await getDealerInternalAccessKey(dealer.id);
+
+      if (!expectedKey || submittedKey !== expectedKey) {
+        return NextResponse.json(
+          { error: "Internal TradeDesk access is not authorized." },
+          { status: 403 }
+        );
+      }
+    }
 
     const customerName = cleanText(body.customerName, 160);
     const customerContact = cleanText(body.contact || body.customerContact, 180);
@@ -63,6 +97,7 @@ export async function POST(
       eventType: "intake_started",
       payload: {
         mode,
+        access: mode === "internal" ? "dealer_internal_key" : "public_customer",
         streamingUpload: true,
         requiredPhotos: ["front", "driverSide", "rear", "odometer", "vin"],
         marketContext,
