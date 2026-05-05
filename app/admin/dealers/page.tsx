@@ -6,7 +6,6 @@ import {
   useMemo,
   useState,
   type CSSProperties,
-  type ReactNode,
 } from "react";
 
 type Dealer = {
@@ -334,7 +333,7 @@ function Pill({
   children,
   tone,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   tone: "green" | "gray" | "amber" | "blue" | "red";
 }) {
   const styles: Record<typeof tone, CSSProperties> = {
@@ -735,19 +734,23 @@ Tim`,
     setCommunicationsStatus("");
 
     try {
-      if (!compose.dealer_id) {
-        throw new Error("Choose a dealer before sending.");
-      }
-
       if (!compose.to_email.includes("@")) {
         throw new Error("Add a valid recipient email before sending.");
+      }
+
+      if (!compose.subject.trim()) {
+        throw new Error("Subject is required before sending.");
+      }
+
+      if (!compose.body.trim()) {
+        throw new Error("Message body is required before sending.");
       }
 
       const response = await fetch("/api/admin/dealer-communications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dealer_id: compose.dealer_id,
+          dealer_id: compose.dealer_id || null,
           to_email: compose.to_email,
           cc_emails: compose.cc_emails,
           subject: compose.subject,
@@ -763,7 +766,15 @@ Tim`,
         throw new Error(json.error || "Could not send marketing email.");
       }
 
-      setCommunicationsStatus("Marketing email sent and logged.");
+      if (!json.ok && json.error) {
+        throw new Error(json.error);
+      }
+
+      setCommunicationsStatus(
+        compose.dealer_id
+          ? "Dealer marketing email sent and logged."
+          : "Direct outreach email sent and logged.",
+      );
       setCompose((previous) => ({
         ...previous,
         subject: "",
@@ -1871,7 +1882,7 @@ Tim`,
 
                 <div className="field-grid">
                   <label style={labelStyle()}>
-                    Dealer
+                    Dealer <span style={{ color: muted, fontWeight: 800 }}>(optional)</span>
                     <select
                       value={compose.dealer_id}
                       onChange={(event) =>
@@ -1879,7 +1890,7 @@ Tim`,
                       }
                       style={fieldStyle()}
                     >
-                      <option value="">Choose dealer</option>
+                      <option value="">Direct outreach / no dealer selected</option>
                       {dealers.map((dealer) => (
                         <option key={dealer.id} value={dealer.id}>
                           {dealer.name} /{dealer.slug}
@@ -2230,9 +2241,8 @@ Tim`,
                       lineHeight: 1.45,
                     }}
                   >
-                    No dealer emails loaded yet. Choose a dealer or refresh the
-                    inbox once the /api/admin/dealer-communications route is
-                    wired.
+                    No emails loaded yet. Select a dealer to filter history, or refresh
+                    the inbox to view recent direct and dealer-bound outreach.
                   </div>
                 ) : null}
               </div>
