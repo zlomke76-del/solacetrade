@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import TradeDesk from "@/components/TradeDesk";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import {
-  formatDealerPhoneLine,
-  SOLACETRADE_SCHEMA,
-} from "@/lib/solacetrade";
+import { SOLACETRADE_SCHEMA } from "@/lib/solacetrade";
 
 type InternalPageProps = {
   params: {
@@ -30,6 +27,11 @@ const defaultBrandColor = "#b91c1c";
 
 function cleanKey(value: unknown) {
   return String(value || "").trim();
+}
+
+function formatInternalSalesLine(dealer: InternalDealer) {
+  const phone = String(dealer.sales_phone || "").trim();
+  return phone || "Staff intake";
 }
 
 async function getInternalDealer(dealerSlug: string) {
@@ -65,7 +67,10 @@ export async function generateMetadata({ params }: InternalPageProps) {
   };
 }
 
-export default async function DealerInternalPage({ params, searchParams }: InternalPageProps) {
+export default async function DealerInternalPage({
+  params,
+  searchParams,
+}: InternalPageProps) {
   const dealer = await getInternalDealer(params.dealerSlug);
 
   if (!dealer) {
@@ -79,7 +84,7 @@ export default async function DealerInternalPage({ params, searchParams }: Inter
   }
 
   const brandColor = dealer.brand_color || defaultBrandColor;
-  const salesLine = formatDealerPhoneLine(dealer);
+  const salesLine = formatInternalSalesLine(dealer);
 
   return (
     <main
