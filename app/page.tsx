@@ -7,7 +7,6 @@ const DEMO_DEALER_SLUG = "jerseyvillagecdjr";
 const DEMO_DEALER_NAME = "Jersey Village Chrysler Jeep Dodge Ram";
 const DEMO_BRAND_COLOR = "#b91c1c";
 const DEMO_MANAGER_EMAIL = "manager@dealer.com";
-const DEMO_INTERNAL_ACCESS_KEY = "demo-internal-preview";
 
 export default function Page() {
   return (
@@ -330,7 +329,6 @@ export default function Page() {
                   brandColor={DEMO_BRAND_COLOR}
                   managerEmail={DEMO_MANAGER_EMAIL}
                   routingCcEmails={[]}
-                  internalAccessKey={DEMO_INTERNAL_ACCESS_KEY}
                 />
               </div>
 
