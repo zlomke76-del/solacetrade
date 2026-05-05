@@ -24,6 +24,16 @@ type InternalDealer = {
 };
 
 const defaultBrandColor = "#b91c1c";
+const openInternalDemoSlugs = new Set(
+  (process.env.SOLACETRADE_OPEN_INTERNAL_DEMO_SLUGS || "jerseyvillagecdjr")
+    .split(",")
+    .map((slug) => slug.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isOpenInternalDemoDealer(slug: string) {
+  return openInternalDemoSlugs.has(String(slug || "").trim().toLowerCase());
+}
 
 function cleanKey(value: unknown) {
   return String(value || "").trim();
@@ -78,8 +88,9 @@ export default async function DealerInternalPage({
   }
 
   const internalAccessKey = cleanKey(searchParams?.k);
+  const isOpenDemo = isOpenInternalDemoDealer(dealer.slug);
 
-  if (!dealer.internal_access_key || internalAccessKey !== dealer.internal_access_key) {
+  if (!isOpenDemo && (!dealer.internal_access_key || internalAccessKey !== dealer.internal_access_key)) {
     notFound();
   }
 
@@ -182,7 +193,7 @@ export default async function DealerInternalPage({
           brandColor={brandColor}
           managerEmail={dealer.lead_email}
           routingCcEmails={dealer.routing_cc_emails || []}
-          internalAccessKey={internalAccessKey}
+          internalAccessKey={isOpenDemo ? "" : internalAccessKey}
         />
       </section>
     </main>
