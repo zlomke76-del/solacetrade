@@ -203,7 +203,7 @@ function buildHtmlBody(input: {
             <tr>
               <td style="padding:16px 22px;background:#f8fafc;border-top:1px solid #e2e8f0;">
                 <div style="font-size:12px;line-height:1.5;color:#64748b;">
-                  You are receiving this because SolaceTrade is contacting automotive retail professionals about trade-in acquisition workflow. To stop receiving SolaceTrade outreach, <a href="${escapeHtml(unsubscribeUrl)}" style="color:#9a3412;font-weight:800;text-decoration:underline;">unsubscribe here</a>.
+                  You are receiving this because SolaceTrade is contacting automotive retail professionals about trade-in acquisition workflow. To stop receiving SolaceTrade outreach, <a href="${escapeHtml(input.unsubscribeUrl)}" style="color:#9a3412;font-weight:800;text-decoration:underline;">unsubscribe here</a>.
                 </div>
                 <div style="font-size:11px;line-height:1.5;color:#94a3b8;margin-top:10px;">SolaceTrade · Houston, TX</div>
               </td>
