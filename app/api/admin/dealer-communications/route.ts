@@ -8,7 +8,7 @@ export const revalidate = 0;
 type Direction = "inbound" | "outbound";
 
 type DealerCommunicationPayload = {
-  dealer_id?: string;
+  dealer_id?: string | null;
   to_email?: string;
   from_email?: string;
   cc_emails?: string[] | string | null;
@@ -16,6 +16,8 @@ type DealerCommunicationPayload = {
   body?: string;
   marketing_stage?: string;
   direction?: Direction;
+  thread_key?: string | null;
+  reply_to_message_id?: string | null;
 };
 
 const DEFAULT_FROM_EMAIL =
@@ -35,7 +37,7 @@ function splitEmailList(value: string[] | string | null | undefined) {
 
   return source
     .split(/[;,\n]/g)
-    .map((email) => email.trim())
+    .map((email) => email.trim().toLowerCase())
     .filter((email) => email.includes("@"));
 }
 
@@ -54,6 +56,18 @@ function makeError(error: unknown, fallback: string) {
   return fallback;
 }
 
+function normalizeThreadSubject(value: string) {
+  return String(value || "No subject")
+    .replace(/^\s*((re|fw|fwd):\s*)+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase() || "no subject";
+}
+
+function buildThreadKey(input: { contactEmail: string; subject: string }) {
+  return `${input.contactEmail.toLowerCase()}::${normalizeThreadSubject(input.subject)}`;
+}
+
 async function getDealer(dealerId: string) {
   const { data, error } = await supabaseAdmin
     .schema("solacetrade")
@@ -66,6 +80,20 @@ async function getDealer(dealerId: string) {
   if (!data) throw new Error("Dealer not found.");
 
   return data;
+}
+
+async function findMessageById(messageId: string | null | undefined) {
+  if (!messageId) return null;
+
+  const { data, error } = await supabaseAdmin
+    .schema("solacetrade")
+    .from("dealer_communications")
+    .select("id,thread_key,contact_email,dealer_id,dealer_slug,dealer_name,subject,marketing_stage")
+    .eq("id", messageId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data || null;
 }
 
 export async function GET(req: Request) {
@@ -93,6 +121,9 @@ export async function GET(req: Request) {
           marketing_stage,
           provider,
           provider_message_id,
+          thread_key,
+          contact_email,
+          reply_to_message_id,
           created_at,
           sent_at,
           received_at,
@@ -103,7 +134,7 @@ export async function GET(req: Request) {
         `,
       )
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(250);
 
     if (dealerId) query = query.eq("dealer_id", dealerId);
     if (direction === "inbound" || direction === "outbound") {
@@ -141,8 +172,9 @@ export async function POST(req: Request) {
     const body = normalizeRequiredText(payload.body);
     const toEmail = normalizeRequiredText(payload.to_email).toLowerCase();
     const fromEmail = normalizeRequiredText(payload.from_email).toLowerCase() || DEFAULT_FROM_EMAIL;
-    const ccEmails = splitEmailList(payload.cc_emails).map((email) => email.toLowerCase());
+    const ccEmails = splitEmailList(payload.cc_emails);
     const marketingStage = normalizeOptionalText(payload.marketing_stage) || "general";
+    const replyToMessageId = normalizeOptionalText(payload.reply_to_message_id);
 
     if (!subject) {
       return NextResponse.json({ error: "Subject is required." }, { status: 400 });
@@ -166,9 +198,15 @@ export async function POST(req: Request) {
       );
     }
 
+    const parentMessage = await findMessageById(replyToMessageId);
     const dealer = dealerId ? await getDealer(dealerId) : null;
     const now = new Date().toISOString();
     const replyToEmail = DEFAULT_REPLY_TO_EMAIL;
+    const contactEmail = direction === "outbound" ? toEmail : fromEmail;
+    const threadKey =
+      normalizeOptionalText(payload.thread_key) ||
+      parentMessage?.thread_key ||
+      buildThreadKey({ contactEmail, subject });
 
     let providerMessageId: string | null = null;
     let status: "sent" | "received" | "failed" = direction === "inbound" ? "received" : "sent";
@@ -207,9 +245,9 @@ export async function POST(req: Request) {
       .schema("solacetrade")
       .from("dealer_communications")
       .insert({
-        dealer_id: dealer?.id || null,
-        dealer_slug: dealer?.slug || null,
-        dealer_name: dealer?.name || "Direct Outreach",
+        dealer_id: dealer?.id || parentMessage?.dealer_id || null,
+        dealer_slug: dealer?.slug || parentMessage?.dealer_slug || null,
+        dealer_name: dealer?.name || parentMessage?.dealer_name || "Direct Outreach",
         direction,
         status,
         from_email: direction === "outbound" ? DEFAULT_FROM_EMAIL : fromEmail,
@@ -220,6 +258,9 @@ export async function POST(req: Request) {
         marketing_stage: marketingStage,
         provider: direction === "outbound" ? "resend" : "manual",
         provider_message_id: providerMessageId,
+        thread_key: threadKey,
+        contact_email: contactEmail,
+        reply_to_message_id: replyToMessageId || null,
         sent_at: direction === "outbound" && status === "sent" ? now : null,
         received_at: direction === "inbound" ? now : null,
         failed_at: failedAt,
@@ -228,6 +269,11 @@ export async function POST(req: Request) {
           sender: DEFAULT_FROM_EMAIL,
           reply_to: replyToEmail,
           sender_policy: "solacetrade_verified_domain_only",
+          conversation: {
+            thread_key: threadKey,
+            contact_email: contactEmail,
+            reply_to_message_id: replyToMessageId || null,
+          },
         },
       })
       .select("*")
