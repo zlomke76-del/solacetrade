@@ -10,6 +10,17 @@ import {
 
 type TradeDeskMode = "customer" | "internal";
 
+const openInternalDemoSlugs = new Set(
+  (process.env.SOLACETRADE_OPEN_INTERNAL_DEMO_SLUGS || "jerseyvillagecdjr")
+    .split(",")
+    .map((slug) => slug.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isOpenInternalDemoDealer(slug: string) {
+  return openInternalDemoSlugs.has(String(slug || "").trim().toLowerCase());
+}
+
 function normalizeMode(value: unknown): TradeDeskMode {
   return cleanText(value, 20) === "internal" ? "internal" : "customer";
 }
@@ -48,7 +59,9 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const mode = normalizeMode(body.mode);
 
-    if (mode === "internal") {
+    const isOpenDemo = isOpenInternalDemoDealer(dealer.slug);
+
+    if (mode === "internal" && !isOpenDemo) {
       const submittedKey = getSubmittedInternalKey(body, request);
       const expectedKey = await getDealerInternalAccessKey(dealer.id);
 
@@ -97,7 +110,12 @@ export async function POST(
       eventType: "intake_started",
       payload: {
         mode,
-        access: mode === "internal" ? "dealer_internal_key" : "public_customer",
+        access:
+          mode === "internal"
+            ? isOpenDemo
+              ? "open_demo_internal"
+              : "dealer_internal_key"
+            : "public_customer",
         streamingUpload: true,
         requiredPhotos: ["front", "driverSide", "rear", "odometer", "vin"],
         marketContext,
