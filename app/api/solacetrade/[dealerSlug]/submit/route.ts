@@ -257,6 +257,28 @@ function renderRecallItems(recalls: NhtsaRecall[]) {
     .join("");
 }
 
+
+function getDealerInternalAccessKey(dealer: unknown) {
+  const record =
+    dealer && typeof dealer === "object"
+      ? (dealer as Record<string, unknown>)
+      : {};
+
+  return cleanText(record.internal_access_key, 160);
+}
+
+function isAuthorizedInternalAccess({
+  accessKey,
+  dealer,
+}: {
+  accessKey: string;
+  dealer: unknown;
+}) {
+  const expected = getDealerInternalAccessKey(dealer);
+  return Boolean(expected && accessKey && accessKey === expected);
+}
+
+
 export async function POST(
   request: NextRequest,
   context: { params: { dealerSlug: string } }
@@ -270,20 +292,12 @@ export async function POST(
     const customerIntent = cleanText(body?.customerIntent, 80);
     const customerContact = cleanText(body?.contact, 180);
     const customerName = cleanText(body?.customerName, 160);
+    const accessKey =
+      cleanText(body?.accessKey, 160) ||
+      cleanText(request.nextUrl.searchParams.get("k"), 160);
 
     if (!intakeId) {
       return NextResponse.json({ error: "Missing intakeId." }, { status: 400 });
-    }
-
-    if (!customerName) {
-      return NextResponse.json({ error: "Name is required." }, { status: 400 });
-    }
-
-    if (!isValidEmail(customerContact)) {
-      return NextResponse.json(
-        { error: "Enter a valid email to receive your trade certificate." },
-        { status: 400 }
-      );
     }
 
     const { data: intake, error: intakeError } = await supabaseAdmin
@@ -298,6 +312,47 @@ export async function POST(
       return NextResponse.json(
         { error: intakeError?.message || "Trade intake not found." },
         { status: 404 }
+      );
+    }
+
+    const isInternal = intake.mode === "internal";
+
+    if (isInternal && !isAuthorizedInternalAccess({ accessKey, dealer })) {
+      await logTradeEvent({
+        dealerId: dealer.id,
+        intakeId: intake.id,
+        eventType: "internal_submit_denied",
+        payload: {
+          reason: "invalid_internal_access_key",
+          hasAccessKey: Boolean(accessKey),
+        },
+      });
+
+      return NextResponse.json(
+        { error: "Unauthorized internal TradeDesk access." },
+        { status: 403 }
+      );
+    }
+
+    if (!customerName) {
+      return NextResponse.json(
+        {
+          error: isInternal
+            ? "Customer name is required before routing the manager review packet."
+            : "Name is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidEmail(customerContact)) {
+      return NextResponse.json(
+        {
+          error: isInternal
+            ? "Enter a valid manager email to route the review packet."
+            : "Enter a valid email to receive your trade certificate.",
+        },
+        { status: 400 }
       );
     }
 
@@ -349,7 +404,6 @@ export async function POST(
     const vin =
       intake.vin || valuePayload.detectedVin || valuePayload.vin || "Not detected";
     const intentLabel = customerIntent || intake.customer_intent || "Not selected";
-    const isInternal = intake.mode === "internal";
     const executionAdmissibility = getExecutionAdmissibility(valuePayload, {
       offerAmount,
       vin,
@@ -370,7 +424,8 @@ export async function POST(
           admissibility,
           vin,
           mileage,
-          customerFacingFlowContinued: true,
+          customerFacingFlowContinued: !isInternal,
+          isInternal,
         },
       });
     }
@@ -415,7 +470,21 @@ export async function POST(
     const from =
       process.env.RESEND_FROM_EMAIL || "SolaceTrade <onboarding@resend.dev>";
     const customerSubject = `Your Trade Certificate – ${formatMoney(offerAmount)}`;
-    const dealerSubject = `New Trade Opportunity – ${vehicleLabel || "Vehicle"}`;
+    const dealerSubject = isInternal
+      ? `Internal TradeDesk Packet – ${vehicleLabel || "Vehicle"}`
+      : `New Trade Opportunity – ${vehicleLabel || "Vehicle"}`;
+    const dealerHeaderLabel = isInternal
+      ? "Internal TradeDesk Packet"
+      : "New Trade Opportunity";
+    const dealerHeaderSubtitle = isInternal
+      ? "Salesperson intake routed a manager review packet through Internal TradeDesk."
+      : "Customer generated a trade certificate and is ready for follow-up.";
+    const dealerActionHtml = isInternal
+      ? ""
+      : `
+              <div style="margin-top:18px;text-align:center;">
+                <a href="mailto:${escapeHtml(customerContact)}?subject=${encodeURIComponent(`Your trade certificate from ${dealer.name}`)}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#ffffff;border-radius:12px;text-decoration:none;font-weight:900;">Email Customer</a>
+              </div>`;
 
     const customerHtml = `
       <div style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;">
@@ -482,9 +551,9 @@ export async function POST(
         <div style="max-width:680px;margin:0 auto;padding:24px;">
           <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.12);">
             <div style="background:#0f172a;color:#ffffff;padding:20px 22px;">
-              <div style="font-size:11px;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#cbd5e1;">New Trade Opportunity</div>
+              <div style="font-size:11px;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#cbd5e1;">${escapeHtml(dealerHeaderLabel)}</div>
               <h1 style="margin:8px 0 0;font-size:26px;line-height:1.1;letter-spacing:-0.04em;">${escapeHtml(vehicleLabel || "Vehicle submitted")}</h1>
-              <div style="margin-top:8px;font-size:14px;color:#e2e8f0;">Customer generated a trade certificate and is ready for follow-up.</div>
+              <div style="margin-top:8px;font-size:14px;color:#e2e8f0;">${escapeHtml(dealerHeaderSubtitle)}</div>
             </div>
 
             <div style="padding:22px;">
@@ -512,9 +581,7 @@ export async function POST(
                 </div>
               </div>
 
-              <div style="margin-top:18px;text-align:center;">
-                <a href="mailto:${escapeHtml(customerContact)}?subject=${encodeURIComponent(`Your trade certificate from ${dealer.name}`)}" style="display:inline-block;padding:12px 18px;background:#0f172a;color:#ffffff;border-radius:12px;text-decoration:none;font-weight:900;">Email Customer</a>
-              </div>
+${dealerActionHtml}
 
               <div style="margin-top:18px;padding:14px;border-radius:16px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;">
                 <h3 style="margin:0 0 8px;font-size:15px;">Recall check</h3>
@@ -559,22 +626,25 @@ export async function POST(
     if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
 
-      const customerEmail = await resend.emails.send({
-        from,
-        to: [customerContact],
-        subject: customerSubject,
-        html: customerHtml,
-      });
+      if (!isInternal) {
+        const customerEmail = await resend.emails.send({
+          from,
+          to: [customerContact],
+          subject: customerSubject,
+          html: customerHtml,
+        });
 
-      if (customerEmail.error) {
-        throw new Error(customerEmail.error.message);
+        if (customerEmail.error) {
+          throw new Error(customerEmail.error.message);
+        }
+
+        customerEmailId = customerEmail.data?.id || null;
       }
 
-      customerEmailId = customerEmail.data?.id || null;
-
+      const dealerRecipient = isInternal ? customerContact : dealer.lead_email;
       const dealerEmail = await resend.emails.send({
         from,
-        to: [dealer.lead_email],
+        to: [dealerRecipient],
         subject: dealerSubject,
         html: dealerHtml,
       });
@@ -589,13 +659,14 @@ export async function POST(
     await logTradeEvent({
       dealerId: dealer.id,
       intakeId: intake.id,
-      eventType: "certificate_sent",
+      eventType: isInternal ? "manager_review_packet_sent" : "certificate_sent",
       payload: {
         customerIntent,
         certificateId,
+        isInternal,
         emailedTo: {
-          customer: customerContact,
-          dealer: dealer.lead_email,
+          customer: isInternal ? null : customerContact,
+          dealer: isInternal ? customerContact : dealer.lead_email,
         },
         customerEmailId,
         dealerEmailId,
@@ -609,41 +680,44 @@ export async function POST(
       },
     });
 
-    const followupKey = `DF-${crypto.randomUUID()}`;
-    const followupDueAt = new Date(Date.now() + 120000).toISOString();
-    const dealerFollowupEmail = buildDealerFollowupEmail({
-      dealerName: dealer.name,
-      dealerLeadEmail: dealer.lead_email,
-      customerEmail: customerContact,
-      customerName,
-      vehicleLabel: vehicleLabel || "your vehicle",
-      offerAmount: typeof offerAmount === "number" ? offerAmount : null,
-      offerCurrency: intake.offer_currency || valuePayload.offerCurrency || "USD",
-      locale: valuePayload.locale || undefined,
-      customerIntent: intentLabel,
-    });
-
-    await logTradeEvent({
-      dealerId: dealer.id,
-      intakeId: intake.id,
-      eventType: "dealer_followup_pending",
-      payload: {
-        followupKey,
-        dueAt: followupDueAt,
-        delaySeconds: 120,
-        cancelIfDealerTouchesLead: true,
-        sourceEvent: "certificate_sent",
-        certificateId,
+    if (!isInternal) {
+      const followupKey = `DF-${crypto.randomUUID()}`;
+      const followupDueAt = new Date(Date.now() + 120000).toISOString();
+      const dealerFollowupEmail = buildDealerFollowupEmail({
+        dealerName: dealer.name,
+        dealerLeadEmail: dealer.lead_email,
+        customerEmail: customerContact,
+        customerName,
+        vehicleLabel: vehicleLabel || "your vehicle",
+        offerAmount: typeof offerAmount === "number" ? offerAmount : null,
+        offerCurrency: intake.offer_currency || valuePayload.offerCurrency || "USD",
+        locale: valuePayload.locale || undefined,
         customerIntent: intentLabel,
-        email: dealerFollowupEmail,
-        resendEnabled: Boolean(process.env.RESEND_API_KEY),
-      },
-    });
+      });
+
+      await logTradeEvent({
+        dealerId: dealer.id,
+        intakeId: intake.id,
+        eventType: "dealer_followup_pending",
+        payload: {
+          followupKey,
+          dueAt: followupDueAt,
+          delaySeconds: 120,
+          cancelIfDealerTouchesLead: true,
+          sourceEvent: "certificate_sent",
+          certificateId,
+          customerIntent: intentLabel,
+          email: dealerFollowupEmail,
+          resendEnabled: Boolean(process.env.RESEND_API_KEY),
+        },
+      });
+    }
 
 
     return NextResponse.json({
       ok: true,
       intakeId: intake.id,
+      isInternal,
       emailed: Boolean(customerEmailId || dealerEmailId),
       customerEmailId,
       dealerEmailId,
