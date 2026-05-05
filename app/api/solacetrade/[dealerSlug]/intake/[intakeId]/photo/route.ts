@@ -9,6 +9,16 @@ import {
 } from "@/lib/solacetrade";
 
 const requiredPhotoSteps = ["front", "driverSide", "rear", "odometer", "vin"] as const;
+const openInternalDemoSlugs = new Set(
+  (process.env.SOLACETRADE_OPEN_INTERNAL_DEMO_SLUGS || "jerseyvillagecdjr")
+    .split(",")
+    .map((slug) => slug.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isOpenInternalDemoDealer(slug: string) {
+  return openInternalDemoSlugs.has(String(slug || "").trim().toLowerCase());
+}
 
 type RequiredPhotoStep = (typeof requiredPhotoSteps)[number];
 
@@ -119,7 +129,9 @@ export async function POST(
 
     const formData = await request.formData();
 
-    if (intake.mode === "internal") {
+    const isOpenDemo = isOpenInternalDemoDealer(dealer.slug);
+
+    if (intake.mode === "internal" && !isOpenDemo) {
       const submittedKey = cleanText(
         formData.get("internalAccessKey") || request.headers.get("x-solacetrade-internal-key") || "",
         120
@@ -228,6 +240,12 @@ export async function POST(
         photoCount: uploaded.photoCount,
         uploadedSteps: uploaded.uploadedSteps,
         streamingUpload: true,
+        access:
+          intake.mode === "internal"
+            ? isOpenDemo
+              ? "open_demo_internal"
+              : "dealer_internal_key"
+            : "public_customer",
         access: intake.mode === "internal" ? "dealer_internal_key" : "public_customer",
       },
     });
