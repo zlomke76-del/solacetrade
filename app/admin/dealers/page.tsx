@@ -753,12 +753,14 @@ export default function AdminDealersPage() {
     > = {
       intro: {
         marketing_stage: "intro",
-        subject: `TradeDesk by Solace for ${dealerName}`,
+        subject: `Cleaner trade intake for ${dealerName}`,
         body: `Hi,
 
-I wanted to put TradeDesk by Solace in front of you because it turns the trade-in process into a guided, evidence-based intake instead of another lead form.
+I wanted to put SolaceTrade in front of you because most trade-in tools still behave like lead forms. The customer submits partial information, the store chases details, and the first desk review starts with missing context.
 
-The dealer gets VIN, mileage, photos, condition context, and a clearer acquisition file before the first follow-up.
+SolaceTrade turns that into a guided vehicle scan. The customer captures the front, side, rear, odometer, and VIN. Your team receives a cleaner acquisition file with photos, mileage, VIN context, condition signals, and a faster path to a real offer.
+
+The point is simple: fewer weak trade leads, better first-touch information, and a more useful deal file before anyone starts chasing the customer.
 
 Worth a quick look?
 
@@ -767,24 +769,26 @@ Tim`,
       },
       followup: {
         marketing_stage: "follow_up",
-        subject: `Following up on TradeDesk by Solace`,
+        subject: `Following up on SolaceTrade`,
         body: `Hi,
 
-Following up here. The main value is simple: more usable trade opportunities, less back-and-forth, and a faster path from customer interest to desk review.
+Following up here. SolaceTrade is built for one specific problem: trade opportunities often arrive before the store has enough evidence to act quickly.
 
-It is built for dealerships that want cleaner acquisition flow without adding another complicated CRM layer.
+Instead of another generic form, the customer walks through a short scan and your team gets the vehicle evidence up front. That means less back-and-forth, cleaner manager review, and a better shot at keeping the customer moving.
 
 Best,
 Tim`,
       },
       pricing: {
         marketing_stage: "pricing",
-        subject: `TradeDesk pricing`,
+        subject: `SolaceTrade pricing`,
         body: `Hi,
 
-For a single rooftop, TradeDesk by Solace is currently positioned at $595/month with setup handled directly.
+For a single rooftop, SolaceTrade is currently positioned at $595/month with setup handled directly.
 
-That includes the customer-facing scan flow, dealer dashboard, intake routing, and trade opportunity file.
+That includes the customer-facing scan flow, internal staff intake option, dealer dashboard, routing, and the manager-ready trade opportunity file.
+
+The goal is not to replace dealer control. It gives the desk better evidence earlier so the store can move faster and make cleaner acquisition decisions.
 
 Best,
 Tim`,
@@ -2227,9 +2231,12 @@ Tim`,
                       onChange={(event) =>
                         updateComposeField("body", event.target.value)
                       }
-                      placeholder="Write the dealer marketing email..."
+                      placeholder="Write the dealer outreach email..."
                       style={{ ...textareaStyle(), minHeight: 190 }}
                     />
+                    <span style={helperStyle()}>
+                      Sent as a branded SolaceTrade HTML email with a plain-text fallback and automatic opt-out footer.
+                    </span>
                   </label>
                 </div>
 
@@ -2250,7 +2257,7 @@ Tim`,
                     opacity: sendingCommunication ? 0.7 : 1,
                   }}
                 >
-                  {sendingCommunication ? "Sending..." : "Send marketing email"}
+                  {sendingCommunication ? "Sending..." : "Send HTML outreach email"}
                 </button>
 
                 {communicationsStatus ? (
@@ -2643,6 +2650,9 @@ Tim`,
                             placeholder="Write a reply in this thread..."
                             style={{ ...textareaStyle(), minHeight: 92 }}
                           />
+                          <span style={helperStyle()}>
+                            Replies also use the SolaceTrade HTML format and include the opt-out footer.
+                          </span>
                         </label>
                         <div
                           style={{
@@ -2654,7 +2664,7 @@ Tim`,
                           }}
                         >
                           <span style={{ color: muted, fontSize: 12, fontWeight: 700 }}>
-                            Sends from SolaceTrade and logs back into this thread.
+                            Sends as a formatted SolaceTrade email and logs back into this thread.
                           </span>
                           <button
                             type="submit"
