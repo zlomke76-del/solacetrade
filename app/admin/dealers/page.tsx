@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 
 type Dealer = {
   id: string;
@@ -30,6 +36,46 @@ type Dealer = {
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
   billing_status?: string | null;
+};
+
+type CommunicationDirection = "inbound" | "outbound";
+type CommunicationStatus = "draft" | "sent" | "received" | "failed";
+
+type CommunicationMessage = {
+  id: string;
+  dealer_id: string | null;
+  dealer_slug?: string | null;
+  dealer_name?: string | null;
+  direction: CommunicationDirection;
+  status?: CommunicationStatus | string | null;
+  from_email: string;
+  to_email: string;
+  cc_emails?: string[] | string | null;
+  subject: string;
+  body: string;
+  created_at?: string | null;
+  sent_at?: string | null;
+  received_at?: string | null;
+  opened_at?: string | null;
+  marketing_stage?: string | null;
+};
+
+type ComposeForm = {
+  dealer_id: string;
+  to_email: string;
+  cc_emails: string;
+  subject: string;
+  body: string;
+  marketing_stage: string;
+};
+
+const blankCompose: ComposeForm = {
+  dealer_id: "",
+  to_email: "",
+  cc_emails: "",
+  subject: "",
+  body: "",
+  marketing_stage: "general",
 };
 
 type DealerForm = {
@@ -146,7 +192,58 @@ function countEmailList(value: string[] | string | null | undefined) {
 
 function isErrorStatus(message: string) {
   const lowered = message.toLowerCase();
-  return lowered.includes("could") || lowered.includes("error") || lowered.includes("failed");
+  return (
+    lowered.includes("could") ||
+    lowered.includes("error") ||
+    lowered.includes("failed")
+  );
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "No timestamp";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No timestamp";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function messageTime(message: CommunicationMessage) {
+  return message.sent_at || message.received_at || message.created_at || null;
+}
+
+function splitEmailList(value: string[] | string | null | undefined) {
+  return normalizeEmailList(value)
+    .split(/[;,\n]/g)
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+function uniqueEmailList(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .filter(Boolean)
+        .map((value) => String(value).trim())
+        .filter((value) => value.includes("@")),
+    ),
+  );
+}
+
+function dealerRecipientOptions(dealer: Dealer | undefined) {
+  if (!dealer) return [];
+
+  return uniqueEmailList([
+    dealer.lead_email,
+    dealer.crm_email,
+    dealer.billing_email,
+    ...splitEmailList(dealer.routing_cc_emails),
+  ]);
 }
 
 function fieldStyle(): CSSProperties {
@@ -192,14 +289,39 @@ function helperStyle(): CSSProperties {
   };
 }
 
+const secondaryButtonStyle: CSSProperties = {
+  border: `1px solid ${border}`,
+  borderRadius: 999,
+  background: "white",
+  color: dark,
+  padding: "8px 11px",
+  fontSize: 12,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
 function SectionHeader({ title, note }: { title: string; note?: string }) {
   return (
     <div style={{ margin: "18px 0 10px" }}>
-      <h3 style={{ margin: 0, color: dark, fontSize: 14, letterSpacing: "-0.01em" }}>
+      <h3
+        style={{
+          margin: 0,
+          color: dark,
+          fontSize: 14,
+          letterSpacing: "-0.01em",
+        }}
+      >
         {title}
       </h3>
       {note ? (
-        <p style={{ margin: "4px 0 0", color: muted, fontSize: 12, lineHeight: 1.45 }}>
+        <p
+          style={{
+            margin: "4px 0 0",
+            color: muted,
+            fontSize: 12,
+            lineHeight: 1.45,
+          }}
+        >
           {note}
         </p>
       ) : null}
@@ -207,7 +329,13 @@ function SectionHeader({ title, note }: { title: string; note?: string }) {
   );
 }
 
-function Pill({ children, tone }: { children: React.ReactNode; tone: "green" | "gray" | "amber" | "blue" | "red" }) {
+function Pill({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "green" | "gray" | "amber" | "blue" | "red";
+}) {
   const styles: Record<typeof tone, CSSProperties> = {
     green: { background: "#dcfce7", color: "#166534" },
     gray: { background: "#e2e8f0", color: "#475569" },
@@ -247,7 +375,14 @@ function MiniField({ label, value }: { label: string; value: string }) {
         minWidth: 0,
       }}
     >
-      <span style={{ display: "block", color: muted, fontSize: 11, fontWeight: 900 }}>
+      <span
+        style={{
+          display: "block",
+          color: muted,
+          fontSize: 11,
+          fontWeight: 900,
+        }}
+      >
         {label}
       </span>
       <span
@@ -272,13 +407,43 @@ export default function AdminDealersPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [communicationMessages, setCommunicationMessages] = useState<
+    CommunicationMessage[]
+  >([]);
+  const [communicationsLoading, setCommunicationsLoading] = useState(false);
+  const [communicationsStatus, setCommunicationsStatus] = useState("");
+  const [communicationTab, setCommunicationTab] = useState<
+    "all" | CommunicationDirection
+  >("all");
+  const [compose, setCompose] = useState<ComposeForm>(blankCompose);
+  const [sendingCommunication, setSendingCommunication] = useState(false);
 
   const isEditing = Boolean(form.id);
   const routingCcCount = countEmailList(form.routing_cc_emails);
   const managerReady = hasEmail(form.lead_email);
   const crmReady = hasEmail(form.crm_email) || managerReady;
   const billingReady = hasEmail(form.billing_email);
-  const stripeReady = Boolean(form.stripe_customer_id || form.stripe_subscription_id);
+  const stripeReady = Boolean(
+    form.stripe_customer_id || form.stripe_subscription_id,
+  );
+  const selectedCommunicationDealer = dealers.find(
+    (dealer) => dealer.id === compose.dealer_id,
+  );
+  const selectedRecipientOptions = dealerRecipientOptions(
+    selectedCommunicationDealer,
+  );
+  const visibleCommunicationMessages = communicationMessages.filter(
+    (message) =>
+      communicationTab === "all"
+        ? true
+        : message.direction === communicationTab,
+  );
+  const inboundCount = communicationMessages.filter(
+    (message) => message.direction === "inbound",
+  ).length;
+  const outboundCount = communicationMessages.filter(
+    (message) => message.direction === "outbound",
+  ).length;
 
   const filteredDealers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -320,7 +485,9 @@ export default function AdminDealersPage() {
 
       setDealers(Array.isArray(json.dealers) ? json.dealers : []);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not load dealers.");
+      setStatus(
+        error instanceof Error ? error.message : "Could not load dealers.",
+      );
     } finally {
       setLoading(false);
     }
@@ -330,7 +497,10 @@ export default function AdminDealersPage() {
     loadDealers();
   }, []);
 
-  function updateField<K extends keyof DealerForm>(key: K, value: DealerForm[K]) {
+  function updateField<K extends keyof DealerForm>(
+    key: K,
+    value: DealerForm[K],
+  ) {
     setForm((previous) => ({ ...previous, [key]: value }));
   }
 
@@ -392,12 +562,12 @@ export default function AdminDealersPage() {
 
       const futureFieldsEntered = Boolean(
         form.crm_email ||
-          form.routing_cc_emails ||
-          form.billing_contact_name ||
-          form.billing_email ||
-          form.billing_phone ||
-          form.stripe_customer_id ||
-          form.stripe_subscription_id,
+        form.routing_cc_emails ||
+        form.billing_contact_name ||
+        form.billing_email ||
+        form.billing_phone ||
+        form.stripe_customer_id ||
+        form.stripe_subscription_id,
       );
 
       setStatus(
@@ -410,7 +580,9 @@ export default function AdminDealersPage() {
       setForm(blankForm);
       await loadDealers();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not save dealer.");
+      setStatus(
+        error instanceof Error ? error.message : "Could not save dealer.",
+      );
     } finally {
       setSaving(false);
     }
@@ -439,9 +611,173 @@ export default function AdminDealersPage() {
       setStatus(dealer.is_active ? "Dealer deactivated." : "Dealer activated.");
       await loadDealers();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not update dealer status.");
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Could not update dealer status.",
+      );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function loadCommunications(dealerId = compose.dealer_id) {
+    setCommunicationsLoading(true);
+    setCommunicationsStatus("");
+
+    try {
+      const params = new URLSearchParams();
+      if (dealerId) params.set("dealerId", dealerId);
+
+      const response = await fetch(
+        `/api/admin/dealer-communications${params.toString() ? `?${params}` : ""}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(json.error || "Could not load dealer communications.");
+      }
+
+      setCommunicationMessages(
+        Array.isArray(json.messages) ? json.messages : [],
+      );
+    } catch (error) {
+      setCommunicationsStatus(
+        error instanceof Error
+          ? error.message
+          : "Could not load dealer communications.",
+      );
+      setCommunicationMessages([]);
+    } finally {
+      setCommunicationsLoading(false);
+    }
+  }
+
+  function selectCommunicationDealer(dealerId: string) {
+    const dealer = dealers.find((item) => item.id === dealerId);
+    const recipients = dealerRecipientOptions(dealer);
+
+    setCompose((previous) => ({
+      ...previous,
+      dealer_id: dealerId,
+      to_email: recipients[0] || "",
+    }));
+
+    loadCommunications(dealerId);
+  }
+
+  function updateComposeField<K extends keyof ComposeForm>(
+    key: K,
+    value: ComposeForm[K],
+  ) {
+    setCompose((previous) => ({ ...previous, [key]: value }));
+  }
+
+  function applyMarketingTemplate(kind: "intro" | "followup" | "pricing") {
+    const dealerName = selectedCommunicationDealer?.name || "your dealership";
+
+    const templates: Record<
+      typeof kind,
+      Pick<ComposeForm, "subject" | "body" | "marketing_stage">
+    > = {
+      intro: {
+        marketing_stage: "intro",
+        subject: `TradeDesk by Solace for ${dealerName}`,
+        body: `Hi,
+
+I wanted to put TradeDesk by Solace in front of you because it turns the trade-in process into a guided, evidence-based intake instead of another lead form.
+
+The dealer gets VIN, mileage, photos, condition context, and a clearer acquisition file before the first follow-up.
+
+Worth a quick look?
+
+Best,
+Tim`,
+      },
+      followup: {
+        marketing_stage: "follow_up",
+        subject: `Following up on TradeDesk by Solace`,
+        body: `Hi,
+
+Following up here. The main value is simple: more usable trade opportunities, less back-and-forth, and a faster path from customer interest to desk review.
+
+It is built for dealerships that want cleaner acquisition flow without adding another complicated CRM layer.
+
+Best,
+Tim`,
+      },
+      pricing: {
+        marketing_stage: "pricing",
+        subject: `TradeDesk pricing`,
+        body: `Hi,
+
+For a single rooftop, TradeDesk by Solace is currently positioned at $595/month with setup handled directly.
+
+That includes the customer-facing scan flow, dealer dashboard, intake routing, and trade opportunity file.
+
+Best,
+Tim`,
+      },
+    };
+
+    setCompose((previous) => ({ ...previous, ...templates[kind] }));
+  }
+
+  async function sendMarketingEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSendingCommunication(true);
+    setCommunicationsStatus("");
+
+    try {
+      if (!compose.dealer_id) {
+        throw new Error("Choose a dealer before sending.");
+      }
+
+      if (!compose.to_email.includes("@")) {
+        throw new Error("Add a valid recipient email before sending.");
+      }
+
+      const response = await fetch("/api/admin/dealer-communications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealer_id: compose.dealer_id,
+          to_email: compose.to_email,
+          cc_emails: compose.cc_emails,
+          subject: compose.subject,
+          body: compose.body,
+          marketing_stage: compose.marketing_stage,
+          direction: "outbound",
+        }),
+      });
+
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(json.error || "Could not send marketing email.");
+      }
+
+      setCommunicationsStatus("Marketing email sent and logged.");
+      setCompose((previous) => ({
+        ...previous,
+        subject: "",
+        body: "",
+        marketing_stage: "general",
+      }));
+      await loadCommunications(compose.dealer_id);
+    } catch (error) {
+      setCommunicationsStatus(
+        error instanceof Error
+          ? error.message
+          : "Could not send marketing email.",
+      );
+    } finally {
+      setSendingCommunication(false);
     }
   }
 
@@ -525,6 +861,28 @@ export default function AdminDealersPage() {
           border: 1px solid #fde68a;
         }
 
+        .communication-grid {
+          display: grid;
+          grid-template-columns: minmax(320px, 0.88fr) minmax(0, 1.12fr);
+          gap: 16px;
+          align-items: start;
+        }
+
+        .communication-message-list {
+          display: grid;
+          gap: 10px;
+          max-height: 620px;
+          overflow: auto;
+          padding-right: 4px;
+        }
+
+        .communication-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
         @media (max-width: 960px) {
           main {
             padding: 12px !important;
@@ -534,7 +892,8 @@ export default function AdminDealersPage() {
             flex-direction: column;
           }
 
-          .admin-grid {
+          .admin-grid,
+          .communication-grid {
             grid-template-columns: 1fr;
           }
         }
@@ -591,9 +950,16 @@ export default function AdminDealersPage() {
             >
               Dealer dashboard.
             </h1>
-            <p style={{ margin: "8px 0 0", color: muted, maxWidth: 760, lineHeight: 1.55 }}>
-              Create dealers, configure CRM delivery, manager routing, billing ownership, and prepare each
-              dealer for Stripe subscription setup.
+            <p
+              style={{
+                margin: "8px 0 0",
+                color: muted,
+                maxWidth: 760,
+                lineHeight: 1.55,
+              }}
+            >
+              Create dealers, configure CRM delivery, manager routing, billing
+              ownership, and prepare each dealer for Stripe subscription setup.
             </p>
           </div>
 
@@ -619,17 +985,35 @@ export default function AdminDealersPage() {
 
         <div className="admin-grid">
           <form onSubmit={saveDealer} className="admin-card">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
               <div>
                 <h2 style={{ margin: 0, fontSize: 20 }}>
                   {isEditing ? "Edit dealer" : "Create dealer"}
                 </h2>
-                <p style={{ margin: "5px 0 0", color: muted, fontSize: 13, lineHeight: 1.45 }}>
-                  Name, slug, manager routing, and CRM delivery keep every trade opportunity moving.
+                <p
+                  style={{
+                    margin: "5px 0 0",
+                    color: muted,
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  Name, slug, manager routing, and CRM delivery keep every trade
+                  opportunity moving.
                 </p>
               </div>
 
-              {isEditing ? <Pill tone="gray">Editing</Pill> : <Pill tone="green">New</Pill>}
+              {isEditing ? (
+                <Pill tone="gray">Editing</Pill>
+              ) : (
+                <Pill tone="green">New</Pill>
+              )}
             </div>
 
             <SectionHeader
@@ -653,7 +1037,9 @@ export default function AdminDealersPage() {
                 <input
                   required
                   value={form.slug}
-                  onChange={(event) => updateField("slug", normalizeSlug(event.target.value))}
+                  onChange={(event) =>
+                    updateField("slug", normalizeSlug(event.target.value))
+                  }
                   placeholder="brenhamcdjr"
                   style={fieldStyle()}
                 />
@@ -663,7 +1049,9 @@ export default function AdminDealersPage() {
                 Legal name
                 <input
                   value={form.legal_name}
-                  onChange={(event) => updateField("legal_name", event.target.value)}
+                  onChange={(event) =>
+                    updateField("legal_name", event.target.value)
+                  }
                   placeholder="Optional legal entity name"
                   style={fieldStyle()}
                 />
@@ -689,7 +1077,9 @@ export default function AdminDealersPage() {
                     required
                     type="email"
                     value={form.lead_email}
-                    onChange={(event) => updateField("lead_email", event.target.value)}
+                    onChange={(event) =>
+                      updateField("lead_email", event.target.value)
+                    }
                     placeholder="manager@dealer.com"
                     style={fieldStyle()}
                   />
@@ -703,12 +1093,15 @@ export default function AdminDealersPage() {
                   <input
                     type="email"
                     value={form.crm_email}
-                    onChange={(event) => updateField("crm_email", event.target.value)}
+                    onChange={(event) =>
+                      updateField("crm_email", event.target.value)
+                    }
                     placeholder="internet@dealer.com or leads@crm.com"
                     style={fieldStyle()}
                   />
                   <span style={helperStyle()}>
-                    Where new trade opportunities should land. Leave blank to use the manager email.
+                    Where new trade opportunities should land. Leave blank to
+                    use the manager email.
                   </span>
                 </label>
 
@@ -716,7 +1109,9 @@ export default function AdminDealersPage() {
                   Additional Routing Emails
                   <textarea
                     value={form.routing_cc_emails}
-                    onChange={(event) => updateField("routing_cc_emails", event.target.value)}
+                    onChange={(event) =>
+                      updateField("routing_cc_emails", event.target.value)
+                    }
                     placeholder="gsm@dealer.com, gm@dealer.com, secondmanager@dealer.com"
                     style={textareaStyle()}
                   />
@@ -731,11 +1126,23 @@ export default function AdminDealersPage() {
                   gap: 8,
                 }}
               >
-                <MiniField label="Manager route" value={form.lead_email || "Required"} />
-                <MiniField label="CRM intake" value={form.crm_email || form.lead_email || "Uses manager email"} />
+                <MiniField
+                  label="Manager route"
+                  value={form.lead_email || "Required"}
+                />
+                <MiniField
+                  label="CRM intake"
+                  value={
+                    form.crm_email || form.lead_email || "Uses manager email"
+                  }
+                />
                 <MiniField
                   label="Additional routing"
-                  value={routingCcCount ? `${routingCcCount} additional email${routingCcCount === 1 ? "" : "s"}` : "Optional"}
+                  value={
+                    routingCcCount
+                      ? `${routingCcCount} additional email${routingCcCount === 1 ? "" : "s"}`
+                      : "Optional"
+                  }
                 />
               </div>
 
@@ -751,8 +1158,9 @@ export default function AdminDealersPage() {
                   lineHeight: 1.45,
                 }}
               >
-                The CRM intake email is the working lead destination. Manager and additional routing emails
-                receive visibility so the desk can act without salespeople manually entering addresses.
+                The CRM intake email is the working lead destination. Manager
+                and additional routing emails receive visibility so the desk can
+                act without salespeople manually entering addresses.
               </div>
             </div>
 
@@ -766,7 +1174,9 @@ export default function AdminDealersPage() {
                   Billing Contact Name
                   <input
                     value={form.billing_contact_name}
-                    onChange={(event) => updateField("billing_contact_name", event.target.value)}
+                    onChange={(event) =>
+                      updateField("billing_contact_name", event.target.value)
+                    }
                     placeholder="Controller, office manager, or dealer principal"
                     style={fieldStyle()}
                   />
@@ -778,7 +1188,9 @@ export default function AdminDealersPage() {
                     <input
                       type="email"
                       value={form.billing_email}
-                      onChange={(event) => updateField("billing_email", event.target.value)}
+                      onChange={(event) =>
+                        updateField("billing_email", event.target.value)
+                      }
                       placeholder="billing@dealer.com"
                       style={fieldStyle()}
                     />
@@ -788,7 +1200,9 @@ export default function AdminDealersPage() {
                     Billing Phone
                     <input
                       value={form.billing_phone}
-                      onChange={(event) => updateField("billing_phone", event.target.value)}
+                      onChange={(event) =>
+                        updateField("billing_phone", event.target.value)
+                      }
                       placeholder="Optional"
                       style={fieldStyle()}
                     />
@@ -808,7 +1222,9 @@ export default function AdminDealersPage() {
                     Stripe Customer ID
                     <input
                       value={form.stripe_customer_id}
-                      onChange={(event) => updateField("stripe_customer_id", event.target.value)}
+                      onChange={(event) =>
+                        updateField("stripe_customer_id", event.target.value)
+                      }
                       placeholder="cus_..."
                       style={fieldStyle()}
                     />
@@ -818,7 +1234,9 @@ export default function AdminDealersPage() {
                     Subscription Status
                     <select
                       value={form.billing_status}
-                      onChange={(event) => updateField("billing_status", event.target.value)}
+                      onChange={(event) =>
+                        updateField("billing_status", event.target.value)
+                      }
                       style={fieldStyle()}
                     >
                       <option value="not_started">Not started</option>
@@ -835,7 +1253,9 @@ export default function AdminDealersPage() {
                   Stripe Subscription ID
                   <input
                     value={form.stripe_subscription_id}
-                    onChange={(event) => updateField("stripe_subscription_id", event.target.value)}
+                    onChange={(event) =>
+                      updateField("stripe_subscription_id", event.target.value)
+                    }
                     placeholder="sub_..."
                     style={fieldStyle()}
                   />
@@ -850,9 +1270,18 @@ export default function AdminDealersPage() {
                   marginTop: 10,
                 }}
               >
-                <MiniField label="Manager route" value={managerReady ? "Ready" : "Missing"} />
-                <MiniField label="CRM delivery" value={crmReady ? "Ready" : "Missing"} />
-                <MiniField label="Billing owner" value={billingReady ? "Ready" : "Missing email"} />
+                <MiniField
+                  label="Manager route"
+                  value={managerReady ? "Ready" : "Missing"}
+                />
+                <MiniField
+                  label="CRM delivery"
+                  value={crmReady ? "Ready" : "Missing"}
+                />
+                <MiniField
+                  label="Billing owner"
+                  value={billingReady ? "Ready" : "Missing email"}
+                />
                 <MiniField label="Default plan" value="$595 / month" />
               </div>
 
@@ -868,8 +1297,10 @@ export default function AdminDealersPage() {
                   lineHeight: 1.45,
                 }}
               >
-                Next implementation step: create Stripe customer from billing contact, attach the $595/month
-                price, store customer/subscription IDs, and listen for invoice/payment webhooks.
+                Next implementation step: create Stripe customer from billing
+                contact, attach the $595/month price, store
+                customer/subscription IDs, and listen for invoice/payment
+                webhooks.
               </div>
             </div>
 
@@ -879,7 +1310,9 @@ export default function AdminDealersPage() {
                 Sales phone
                 <input
                   value={form.sales_phone}
-                  onChange={(event) => updateField("sales_phone", event.target.value)}
+                  onChange={(event) =>
+                    updateField("sales_phone", event.target.value)
+                  }
                   placeholder="Optional phone"
                   style={fieldStyle()}
                 />
@@ -889,7 +1322,9 @@ export default function AdminDealersPage() {
                 Address
                 <input
                   value={form.address_line}
-                  onChange={(event) => updateField("address_line", event.target.value)}
+                  onChange={(event) =>
+                    updateField("address_line", event.target.value)
+                  }
                   placeholder="Street address"
                   style={fieldStyle()}
                 />
@@ -900,7 +1335,9 @@ export default function AdminDealersPage() {
                   City
                   <input
                     value={form.city}
-                    onChange={(event) => updateField("city", event.target.value)}
+                    onChange={(event) =>
+                      updateField("city", event.target.value)
+                    }
                     placeholder="City"
                     style={fieldStyle()}
                   />
@@ -910,7 +1347,10 @@ export default function AdminDealersPage() {
                   <input
                     value={form.state}
                     onChange={(event) =>
-                      updateField("state", event.target.value.toUpperCase().slice(0, 2))
+                      updateField(
+                        "state",
+                        event.target.value.toUpperCase().slice(0, 2),
+                      )
                     }
                     placeholder="TX"
                     style={fieldStyle()}
@@ -920,7 +1360,9 @@ export default function AdminDealersPage() {
                   ZIP
                   <input
                     value={form.postal_code}
-                    onChange={(event) => updateField("postal_code", event.target.value)}
+                    onChange={(event) =>
+                      updateField("postal_code", event.target.value)
+                    }
                     placeholder="77833"
                     style={fieldStyle()}
                   />
@@ -930,12 +1372,21 @@ export default function AdminDealersPage() {
 
             <SectionHeader title="System settings" />
             <div className="field-grid">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 56px", gap: 8, alignItems: "end" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 56px",
+                  gap: 8,
+                  alignItems: "end",
+                }}
+              >
                 <label style={labelStyle()}>
                   Brand color
                   <input
                     value={form.brand_color}
-                    onChange={(event) => updateField("brand_color", event.target.value)}
+                    onChange={(event) =>
+                      updateField("brand_color", event.target.value)
+                    }
                     placeholder="#b91c1c"
                     style={fieldStyle()}
                   />
@@ -968,14 +1419,25 @@ export default function AdminDealersPage() {
               >
                 <span>
                   Active dealer
-                  <span style={{ display: "block", color: muted, fontSize: 12, fontWeight: 700, marginTop: 2 }}>
-                    Active dealers can receive customer and internal intake traffic.
+                  <span
+                    style={{
+                      display: "block",
+                      color: muted,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      marginTop: 2,
+                    }}
+                  >
+                    Active dealers can receive customer and internal intake
+                    traffic.
                   </span>
                 </span>
                 <input
                   type="checkbox"
                   checked={form.is_active}
-                  onChange={(event) => updateField("is_active", event.target.checked)}
+                  onChange={(event) =>
+                    updateField("is_active", event.target.checked)
+                  }
                 />
               </label>
             </div>
@@ -997,7 +1459,11 @@ export default function AdminDealersPage() {
                 opacity: saving ? 0.7 : 1,
               }}
             >
-              {saving ? "Saving..." : isEditing ? "Save dealer" : "Create dealer"}
+              {saving
+                ? "Saving..."
+                : isEditing
+                  ? "Save dealer"
+                  : "Create dealer"}
             </button>
 
             {status ? (
@@ -1019,11 +1485,20 @@ export default function AdminDealersPage() {
           </form>
 
           <section className="admin-card">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+              }}
+            >
               <div>
                 <h2 style={{ margin: 0, fontSize: 20 }}>Dealers</h2>
                 <p style={{ margin: "5px 0 0", color: muted, fontSize: 13 }}>
-                  {loading ? "Loading..." : `${filteredDealers.length} shown · ${dealers.length} total`}
+                  {loading
+                    ? "Loading..."
+                    : `${filteredDealers.length} shown · ${dealers.length} total`}
                 </p>
               </div>
               <button
@@ -1054,10 +1529,15 @@ export default function AdminDealersPage() {
             <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
               {filteredDealers.map((dealer) => {
                 const routingConfigured = hasEmail(dealer.lead_email);
-                const crmConfigured = hasEmail(dealer.crm_email) || routingConfigured;
-                const extraRoutingCount = countEmailList(dealer.routing_cc_emails);
+                const crmConfigured =
+                  hasEmail(dealer.crm_email) || routingConfigured;
+                const extraRoutingCount = countEmailList(
+                  dealer.routing_cc_emails,
+                );
                 const dealerBillingReady = hasEmail(dealer.billing_email);
-                const dealerStripeLinked = Boolean(dealer.stripe_customer_id || dealer.stripe_subscription_id);
+                const dealerStripeLinked = Boolean(
+                  dealer.stripe_customer_id || dealer.stripe_subscription_id,
+                );
 
                 return (
                   <article
@@ -1071,8 +1551,17 @@ export default function AdminDealersPage() {
                   >
                     <div className="dealer-card-header">
                       <div style={{ minWidth: 0 }}>
-                        <strong style={{ display: "block", fontSize: 16 }}>{dealer.name}</strong>
-                        <span style={{ display: "block", color: muted, fontSize: 13, marginTop: 4 }}>
+                        <strong style={{ display: "block", fontSize: 16 }}>
+                          {dealer.name}
+                        </strong>
+                        <span
+                          style={{
+                            display: "block",
+                            color: muted,
+                            fontSize: 13,
+                            marginTop: 4,
+                          }}
+                        >
                           /{dealer.slug} · /{dealer.slug}/internal
                         </span>
                         <span
@@ -1084,7 +1573,8 @@ export default function AdminDealersPage() {
                             overflowWrap: "anywhere",
                           }}
                         >
-                          CRM intake: {dealer.crm_email || dealer.lead_email || "Missing"}
+                          CRM intake:{" "}
+                          {dealer.crm_email || dealer.lead_email || "Missing"}
                         </span>
                         <span
                           style={{
@@ -1099,7 +1589,14 @@ export default function AdminDealersPage() {
                         </span>
                       </div>
 
-                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 7,
+                          flexWrap: "wrap",
+                          justifyContent: "flex-end",
+                        }}
+                      >
                         <Pill tone={dealer.is_active ? "green" : "gray"}>
                           {dealer.is_active ? "Active" : "Inactive"}
                         </Pill>
@@ -1107,13 +1604,19 @@ export default function AdminDealersPage() {
                           {crmConfigured ? "CRM set" : "CRM missing"}
                         </Pill>
                         <Pill tone={routingConfigured ? "green" : "amber"}>
-                          {routingConfigured ? "Manager set" : "Manager missing"}
+                          {routingConfigured
+                            ? "Manager set"
+                            : "Manager missing"}
                         </Pill>
                         <Pill tone={dealerBillingReady ? "green" : "amber"}>
-                          {dealerBillingReady ? "Billing set" : "Billing needed"}
+                          {dealerBillingReady
+                            ? "Billing set"
+                            : "Billing needed"}
                         </Pill>
                         <Pill tone={dealerStripeLinked ? "green" : "blue"}>
-                          {dealerStripeLinked ? "Stripe linked" : "Stripe pending"}
+                          {dealerStripeLinked
+                            ? "Stripe linked"
+                            : "Stripe pending"}
                         </Pill>
                       </div>
                     </div>
@@ -1126,18 +1629,43 @@ export default function AdminDealersPage() {
                         marginTop: 12,
                       }}
                     >
-                      <MiniField label="Customer link" value={`/${dealer.slug}`} />
-                      <MiniField label="Internal link" value={`/${dealer.slug}/internal`} />
-                      <MiniField label="CRM dashboard" value={`/dealer/${dealer.slug}/dashboard`} />
-                      <MiniField label="CRM intake" value={dealer.crm_email || dealer.lead_email || "Missing"} />
-                      <MiniField label="Manager route" value={dealer.lead_email || "Missing"} />
+                      <MiniField
+                        label="Customer link"
+                        value={`/${dealer.slug}`}
+                      />
+                      <MiniField
+                        label="Internal link"
+                        value={`/${dealer.slug}/internal`}
+                      />
+                      <MiniField
+                        label="CRM dashboard"
+                        value={`/dealer/${dealer.slug}/dashboard`}
+                      />
+                      <MiniField
+                        label="CRM intake"
+                        value={
+                          dealer.crm_email || dealer.lead_email || "Missing"
+                        }
+                      />
+                      <MiniField
+                        label="Manager route"
+                        value={dealer.lead_email || "Missing"}
+                      />
                       <MiniField
                         label="Additional routing"
-                        value={extraRoutingCount ? `${extraRoutingCount} additional` : "None"}
+                        value={
+                          extraRoutingCount
+                            ? `${extraRoutingCount} additional`
+                            : "None"
+                        }
                       />
                       <MiniField
                         label="Billing contact"
-                        value={dealer.billing_email || dealer.billing_contact_name || "Not set"}
+                        value={
+                          dealer.billing_email ||
+                          dealer.billing_contact_name ||
+                          "Not set"
+                        }
                       />
                       <MiniField
                         label="Stripe customer"
@@ -1225,7 +1753,9 @@ export default function AdminDealersPage() {
                           padding: "9px 10px",
                           borderRadius: 12,
                           background: dealer.is_active ? "#fff7ed" : "#f0fdf4",
-                          border: dealer.is_active ? "1px solid #fed7aa" : "1px solid #bbf7d0",
+                          border: dealer.is_active
+                            ? "1px solid #fed7aa"
+                            : "1px solid #bbf7d0",
                           color: dealer.is_active ? "#9a3412" : "#166534",
                           fontSize: 12,
                           fontWeight: 900,
@@ -1256,6 +1786,458 @@ export default function AdminDealersPage() {
             </div>
           </section>
         </div>
+
+        <section className="admin-card" style={{ marginTop: 18 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "flex-start",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "#fff7ed",
+                  color: "#9a3412",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  marginBottom: 8,
+                }}
+              >
+                Marketing Communication Center
+              </div>
+              <h2 style={{ margin: 0, fontSize: 22, letterSpacing: "-0.03em" }}>
+                Dealer email workspace
+              </h2>
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  color: muted,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  maxWidth: 760,
+                }}
+              >
+                Email-only inbound and outbound history for dealer marketing.
+                Use this to track outreach, follow-ups, pricing conversations,
+                and replies without mixing in SMS or customer trade traffic.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadCommunications()}
+              disabled={communicationsLoading}
+              style={{
+                border: "1px solid #cbd5e1",
+                borderRadius: 13,
+                background: "white",
+                color: dark,
+                padding: "10px 12px",
+                fontWeight: 900,
+                cursor: communicationsLoading ? "wait" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {communicationsLoading ? "Loading..." : "Refresh inbox"}
+            </button>
+          </div>
+
+          <div className="communication-grid" style={{ marginTop: 16 }}>
+            <form
+              onSubmit={sendMarketingEmail}
+              style={{ display: "grid", gap: 12 }}
+            >
+              <div
+                style={{
+                  padding: 13,
+                  borderRadius: 18,
+                  border: `1px solid ${border}`,
+                  background: soft,
+                }}
+              >
+                <SectionHeader
+                  title="Compose marketing email"
+                  note="Choose a dealer, select a known dealer-side recipient, then send and log the message."
+                />
+
+                <div className="field-grid">
+                  <label style={labelStyle()}>
+                    Dealer
+                    <select
+                      value={compose.dealer_id}
+                      onChange={(event) =>
+                        selectCommunicationDealer(event.target.value)
+                      }
+                      style={fieldStyle()}
+                    >
+                      <option value="">Choose dealer</option>
+                      {dealers.map((dealer) => (
+                        <option key={dealer.id} value={dealer.id}>
+                          {dealer.name} /{dealer.slug}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={labelStyle()}>
+                    To
+                    <input
+                      required
+                      list="dealer-email-options"
+                      type="email"
+                      value={compose.to_email}
+                      onChange={(event) =>
+                        updateComposeField("to_email", event.target.value)
+                      }
+                      placeholder="decisionmaker@dealer.com"
+                      style={fieldStyle()}
+                    />
+                    <datalist id="dealer-email-options">
+                      {selectedRecipientOptions.map((email) => (
+                        <option key={email} value={email} />
+                      ))}
+                    </datalist>
+                  </label>
+
+                  <label style={labelStyle()}>
+                    CC
+                    <input
+                      value={compose.cc_emails}
+                      onChange={(event) =>
+                        updateComposeField("cc_emails", event.target.value)
+                      }
+                      placeholder="Optional: gm@dealer.com, controller@dealer.com"
+                      style={fieldStyle()}
+                    />
+                  </label>
+
+                  <label style={labelStyle()}>
+                    Marketing stage
+                    <select
+                      value={compose.marketing_stage}
+                      onChange={(event) =>
+                        updateComposeField(
+                          "marketing_stage",
+                          event.target.value,
+                        )
+                      }
+                      style={fieldStyle()}
+                    >
+                      <option value="general">General</option>
+                      <option value="intro">Intro</option>
+                      <option value="follow_up">Follow-up</option>
+                      <option value="pricing">Pricing</option>
+                      <option value="onboarding">Onboarding</option>
+                    </select>
+                  </label>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => applyMarketingTemplate("intro")}
+                      style={secondaryButtonStyle}
+                    >
+                      Intro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyMarketingTemplate("followup")}
+                      style={secondaryButtonStyle}
+                    >
+                      Follow-up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyMarketingTemplate("pricing")}
+                      style={secondaryButtonStyle}
+                    >
+                      Pricing
+                    </button>
+                  </div>
+
+                  <label style={labelStyle()}>
+                    Subject
+                    <input
+                      required
+                      value={compose.subject}
+                      onChange={(event) =>
+                        updateComposeField("subject", event.target.value)
+                      }
+                      placeholder="Subject line"
+                      style={fieldStyle()}
+                    />
+                  </label>
+
+                  <label style={labelStyle()}>
+                    Message
+                    <textarea
+                      required
+                      value={compose.body}
+                      onChange={(event) =>
+                        updateComposeField("body", event.target.value)
+                      }
+                      placeholder="Write the dealer marketing email..."
+                      style={{ ...textareaStyle(), minHeight: 190 }}
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={sendingCommunication}
+                  style={{
+                    width: "100%",
+                    marginTop: 14,
+                    border: "none",
+                    borderRadius: 15,
+                    background: "#ea580c",
+                    color: "white",
+                    padding: 14,
+                    fontSize: 14,
+                    fontWeight: 900,
+                    cursor: sendingCommunication ? "wait" : "pointer",
+                    opacity: sendingCommunication ? 0.7 : 1,
+                  }}
+                >
+                  {sendingCommunication ? "Sending..." : "Send marketing email"}
+                </button>
+
+                {communicationsStatus ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 11,
+                      borderRadius: 14,
+                      background: isErrorStatus(communicationsStatus)
+                        ? "#fef2f2"
+                        : "#f0fdf4",
+                      color: isErrorStatus(communicationsStatus)
+                        ? "#991b1b"
+                        : "#166534",
+                      fontSize: 13,
+                      fontWeight: 800,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {communicationsStatus}
+                  </div>
+                ) : null}
+              </div>
+            </form>
+
+            <div
+              style={{
+                padding: 13,
+                borderRadius: 18,
+                border: `1px solid ${border}`,
+                background: "white",
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>
+                    Inbound / Outbound
+                  </h3>
+                  <p style={{ margin: "5px 0 0", color: muted, fontSize: 12 }}>
+                    {communicationsLoading
+                      ? "Loading communication history..."
+                      : `${visibleCommunicationMessages.length} shown · ${inboundCount} inbound · ${outboundCount} outbound`}
+                  </p>
+                </div>
+                <Pill tone="blue">Email only</Pill>
+              </div>
+
+              <div className="communication-tabs">
+                {[
+                  ["all", "All"],
+                  ["inbound", "Inbound"],
+                  ["outbound", "Outbound"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() =>
+                      setCommunicationTab(
+                        value as "all" | CommunicationDirection,
+                      )
+                    }
+                    style={{
+                      border:
+                        communicationTab === value
+                          ? "1px solid #fb923c"
+                          : `1px solid ${border}`,
+                      borderRadius: 999,
+                      background:
+                        communicationTab === value ? "#fff7ed" : "white",
+                      color: communicationTab === value ? "#9a3412" : dark,
+                      padding: "8px 11px",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div
+                className="communication-message-list"
+                style={{ marginTop: 12 }}
+              >
+                {visibleCommunicationMessages.map((message) => (
+                  <article
+                    key={message.id}
+                    style={{
+                      border: `1px solid ${border}`,
+                      borderRadius: 16,
+                      padding: 12,
+                      background:
+                        message.direction === "inbound" ? "#f8fafc" : "#fff7ed",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <strong
+                          style={{
+                            display: "block",
+                            fontSize: 14,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {message.subject || "No subject"}
+                        </strong>
+                        <span
+                          style={{
+                            display: "block",
+                            marginTop: 4,
+                            color: muted,
+                            fontSize: 12,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {message.direction === "inbound" ? "From" : "To"}:{" "}
+                          {message.direction === "inbound"
+                            ? message.from_email
+                            : message.to_email}
+                        </span>
+                        {message.dealer_name || message.dealer_slug ? (
+                          <span
+                            style={{
+                              display: "block",
+                              marginTop: 3,
+                              color: muted,
+                              fontSize: 12,
+                            }}
+                          >
+                            {message.dealer_name || message.dealer_slug}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div
+                        style={{ display: "grid", gap: 6, justifyItems: "end" }}
+                      >
+                        <Pill
+                          tone={
+                            message.direction === "inbound" ? "blue" : "amber"
+                          }
+                        >
+                          {message.direction}
+                        </Pill>
+                        <span
+                          style={{
+                            color: muted,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatDateTime(messageTime(message))}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p
+                      style={{
+                        margin: "10px 0 0",
+                        color: "#334155",
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {message.body || "No body captured."}
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginTop: 10,
+                      }}
+                    >
+                      {message.status ? (
+                        <Pill
+                          tone={message.status === "failed" ? "red" : "gray"}
+                        >
+                          {message.status}
+                        </Pill>
+                      ) : null}
+                      {message.marketing_stage ? (
+                        <Pill tone="gray">{message.marketing_stage}</Pill>
+                      ) : null}
+                      {message.opened_at ? (
+                        <Pill tone="green">Opened</Pill>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+
+                {!communicationsLoading &&
+                visibleCommunicationMessages.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 18,
+                      borderRadius: 18,
+                      background: soft,
+                      border: `1px solid ${border}`,
+                      color: muted,
+                      fontSize: 14,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    No dealer emails loaded yet. Choose a dealer or refresh the
+                    inbox once the /api/admin/dealer-communications route is
+                    wired.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   );
