@@ -246,7 +246,6 @@ export async function POST(
               ? "open_demo_internal"
               : "dealer_internal_key"
             : "public_customer",
-        access: intake.mode === "internal" ? "dealer_internal_key" : "public_customer",
       },
     });
 
