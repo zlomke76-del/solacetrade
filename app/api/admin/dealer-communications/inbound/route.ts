@@ -15,13 +15,12 @@ type ExistingOutbound = {
   from_email: string;
   subject: string;
   marketing_stage: string | null;
-  thread_key: string | null;
-  contact_email: string | null;
   created_at: string | null;
   sent_at: string | null;
 };
 
 const SOLACETRADE_SCHEMA = "solacetrade";
+const RESEND_RECEIVING_BASE_URL = "https://api.resend.com/emails/receiving";
 
 function asObject(value: unknown): AnyObject {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -53,6 +52,9 @@ function stripHtml(value: string) {
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -60,6 +62,12 @@ function stripHtml(value: string) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&rsquo;/g, "’")
+    .replace(/&lsquo;/g, "‘")
+    .replace(/&rdquo;/g, "”")
+    .replace(/&ldquo;/g, "“")
+    .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
@@ -88,31 +96,30 @@ function extractFirstEmail(value: unknown): string {
   return extractEmail(value);
 }
 
-function normalizeThreadSubject(value: string) {
-  return String(value || "No subject")
-    .replace(/^\s*((re|fw|fwd):\s*)+/gi, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase() || "no subject";
-}
-
-function buildThreadKey(input: { contactEmail: string; subject: string }) {
-  return `${input.contactEmail.toLowerCase()}::${normalizeThreadSubject(input.subject)}`;
-}
-
 function getPayloadRoot(raw: AnyObject) {
   const data = asObject(raw.data);
   return Object.keys(data).length ? data : raw;
 }
 
+function getInboundEmailId(raw: AnyObject, root: AnyObject) {
+  return (
+    asString(root.email_id) ||
+    asString(root.emailId) ||
+    asString(root.id) ||
+    asString(raw.email_id) ||
+    asString(raw.emailId) ||
+    asString(raw.id) ||
+    ""
+  );
+}
+
 function getProviderMessageId(raw: AnyObject, root: AnyObject) {
   return (
-    asString(root.id) ||
-    asString(root.email_id) ||
     asString(root.message_id) ||
     asString(root.messageId) ||
     asString(asObject(root.headers)["message-id"]) ||
-    asString(raw.id) ||
+    asString(asObject(raw.headers)["message-id"]) ||
+    getInboundEmailId(raw, root) ||
     null
   );
 }
@@ -166,6 +173,57 @@ function getAddresses(raw: AnyObject, root: AnyObject) {
   return { fromEmail, toEmail, ccEmails };
 }
 
+async function retrieveReceivedEmail(emailId: string) {
+  if (!emailId) return null;
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is required to retrieve received email content.");
+  }
+
+  const response = await fetch(`${RESEND_RECEIVING_BASE_URL}/${encodeURIComponent(emailId)}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  const json = (await response.json().catch(() => ({}))) as AnyObject;
+
+  if (!response.ok) {
+    const message =
+      asString(json.message) ||
+      asString(json.error) ||
+      `Resend received-email retrieval failed with status ${response.status}.`;
+    throw new Error(message);
+  }
+
+  const data = asObject(json.data);
+  return Object.keys(data).length ? data : json;
+}
+
+function mergeWebhookWithRetrievedEmail(root: AnyObject, retrieved: AnyObject | null) {
+  if (!retrieved) return root;
+
+  return {
+    ...root,
+    ...retrieved,
+    subject: asString(retrieved.subject) || asString(root.subject),
+    from: asString(retrieved.from) || asString(root.from),
+    to: Array.isArray(retrieved.to) && retrieved.to.length ? retrieved.to : root.to,
+    cc: Array.isArray(retrieved.cc) && retrieved.cc.length ? retrieved.cc : root.cc,
+    bcc: Array.isArray(retrieved.bcc) && retrieved.bcc.length ? retrieved.bcc : root.bcc,
+    message_id: asString(retrieved.message_id) || asString(root.message_id),
+    text: asString(retrieved.text) || asString(root.text),
+    html: asString(retrieved.html) || asString(root.html),
+    headers: Object.keys(asObject(retrieved.headers)).length
+      ? asObject(retrieved.headers)
+      : asObject(root.headers),
+  };
+}
+
 async function ensureContact(email: string) {
   const normalizedEmail = email.toLowerCase();
 
@@ -200,7 +258,7 @@ async function findLatestOutboundForContact(email: string) {
     .schema(SOLACETRADE_SCHEMA)
     .from("dealer_communications")
     .select(
-      "id,dealer_id,dealer_slug,dealer_name,to_email,from_email,subject,marketing_stage,thread_key,contact_email,created_at,sent_at",
+      "id,dealer_id,dealer_slug,dealer_name,to_email,from_email,subject,marketing_stage,created_at,sent_at",
     )
     .eq("direction", "outbound")
     .eq("to_email", email.toLowerCase())
@@ -244,8 +302,11 @@ async function markMatchingMarketingSendsReplied(email: string) {
 export async function POST(req: NextRequest) {
   try {
     const raw = (await req.json().catch(() => ({}))) as AnyObject;
-    const root = getPayloadRoot(raw);
+    const webhookRoot = getPayloadRoot(raw);
     const eventType = asString(raw.type) || asString(raw.event) || "email.received";
+    const inboundEmailId = getInboundEmailId(raw, webhookRoot);
+    const retrievedEmail = await retrieveReceivedEmail(inboundEmailId);
+    const root = mergeWebhookWithRetrievedEmail(webhookRoot, retrievedEmail);
 
     const { fromEmail, toEmail, ccEmails } = getAddresses(raw, root);
     const subject = getSubject(root);
@@ -263,9 +324,6 @@ export async function POST(req: NextRequest) {
     const contact = await ensureContact(fromEmail);
     const latestOutbound = await findLatestOutboundForContact(fromEmail);
     const repliedSendIds = await markMatchingMarketingSendsReplied(fromEmail);
-    const threadKey =
-      latestOutbound?.thread_key ||
-      buildThreadKey({ contactEmail: fromEmail, subject });
 
     const { data: inserted, error: insertError } = await supabaseAdmin
       .schema(SOLACETRADE_SCHEMA)
@@ -280,13 +338,10 @@ export async function POST(req: NextRequest) {
         to_email: toEmail,
         cc_emails: ccEmails,
         subject,
-        body,
+        body: body || "No body captured.",
         marketing_stage: latestOutbound?.marketing_stage || "reply",
         provider: "resend",
         provider_message_id: providerMessageId,
-        thread_key: threadKey,
-        contact_email: fromEmail,
-        reply_to_message_id: latestOutbound?.id || null,
         received_at: now,
         metadata: {
           event_type: eventType,
@@ -295,12 +350,9 @@ export async function POST(req: NextRequest) {
           matched_outbound_id: latestOutbound?.id || null,
           replied_marketing_send_ids: repliedSendIds,
           inbound_to: toEmail,
+          inbound_email_id: inboundEmailId || null,
+          body_source: body ? (asString(root.text) ? "received_email_text" : "received_email_html") : "missing",
           raw_event_type: eventType,
-          conversation: {
-            thread_key: threadKey,
-            contact_email: fromEmail,
-            reply_to_message_id: latestOutbound?.id || null,
-          },
         },
       })
       .select("*")
@@ -314,7 +366,8 @@ export async function POST(req: NextRequest) {
       contact,
       matchedOutboundId: latestOutbound?.id || null,
       repliedSendIds,
-      threadKey,
+      inboundEmailId,
+      bodyCaptured: Boolean(body),
     });
   } catch (error) {
     return NextResponse.json(
