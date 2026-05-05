@@ -32,6 +32,7 @@ type TradeDeskProps = {
   locale?: string;
   distanceUnit?: DistanceUnit;
   valuationMarket?: string;
+  internalAccessKey?: string;
 };
 
 type CaptureStep = {
@@ -371,6 +372,7 @@ export default function TradeDesk({
   locale,
   distanceUnit = "mi",
   valuationMarket = "",
+  internalAccessKey = "",
 }: TradeDeskProps) {
   const isInternal = mode === "internal";
   const red = brandColor || "#b91c1c";
@@ -461,7 +463,7 @@ export default function TradeDesk({
     const response = await fetch(`/api/solacetrade/${dealerSlug}/intake`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, internalAccessKey: isInternal ? internalAccessKey : undefined }),
     });
 
     const json = (await response.json().catch(() => ({}))) as IntakeResponse & ApiErrorBody;
@@ -481,6 +483,7 @@ export default function TradeDesk({
 
     formData.append("stepKey", stepKey);
     formData.append("photo", file, file.name || `${stepKey}.jpg`);
+    if (isInternal) formData.append("internalAccessKey", internalAccessKey);
 
     setUploadStates((previous) => ({ ...previous, [stepKey]: "uploading" }));
     setStatusMessage(`Uploading ${captureSteps.find((step) => step.key === stepKey)?.shortLabel || "photo"}...`);
@@ -564,7 +567,10 @@ export default function TradeDesk({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intakeId: intakeIdRef.current }),
+          body: JSON.stringify({
+            intakeId: intakeIdRef.current,
+            internalAccessKey: isInternal ? internalAccessKey : undefined,
+          }),
         }
       );
 
@@ -648,6 +654,7 @@ export default function TradeDesk({
           salesperson: isInternal ? salesperson : undefined,
           managerNotes: isInternal ? managerNotes : undefined,
           mode,
+          internalAccessKey: isInternal ? internalAccessKey : undefined,
         }),
       });
 
