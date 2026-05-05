@@ -23,6 +23,11 @@ const DEFAULT_FROM_EMAIL =
   process.env.SOLACETRADE_MARKETING_FROM_EMAIL ||
   "SolaceTrade <team@solacetrade.ai>";
 
+const DEFAULT_REPLY_TO_EMAIL =
+  process.env.SOLACETRADE_MARKETING_REPLY_TO ||
+  process.env.TRADEDESK_MARKETING_REPLY_TO ||
+  "team@solacetrade.ai";
+
 function splitEmailList(value: string[] | string | null | undefined) {
   if (!value) return [];
 
@@ -47,6 +52,19 @@ function normalizeRequiredText(value: unknown) {
 function makeError(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+function getReplyToEmail(dealer: {
+  lead_email?: string | null;
+  crm_email?: string | null;
+  billing_email?: string | null;
+}) {
+  return (
+    dealer.crm_email ||
+    dealer.lead_email ||
+    dealer.billing_email ||
+    DEFAULT_REPLY_TO_EMAIL
+  );
 }
 
 async function getDealer(dealerId: string) {
@@ -133,9 +151,9 @@ export async function POST(req: Request) {
     const direction: Direction = payload.direction === "inbound" ? "inbound" : "outbound";
     const subject = normalizeRequiredText(payload.subject);
     const body = normalizeRequiredText(payload.body);
-    const toEmail = normalizeRequiredText(payload.to_email);
-    const fromEmail = normalizeRequiredText(payload.from_email) || DEFAULT_FROM_EMAIL;
-    const ccEmails = splitEmailList(payload.cc_emails);
+    const toEmail = normalizeRequiredText(payload.to_email).toLowerCase();
+    const fromEmail = normalizeRequiredText(payload.from_email).toLowerCase() || DEFAULT_FROM_EMAIL;
+    const ccEmails = splitEmailList(payload.cc_emails).map((email) => email.toLowerCase());
     const marketingStage = normalizeOptionalText(payload.marketing_stage) || "general";
 
     if (!dealerId) {
@@ -166,6 +184,7 @@ export async function POST(req: Request) {
 
     const dealer = await getDealer(dealerId);
     const now = new Date().toISOString();
+    const replyToEmail = getReplyToEmail(dealer);
 
     let providerMessageId: string | null = null;
     let status: "sent" | "received" | "failed" = direction === "inbound" ? "received" : "sent";
@@ -187,6 +206,7 @@ export async function POST(req: Request) {
           cc: ccEmails.length ? ccEmails : undefined,
           subject,
           text: body,
+          replyTo: replyToEmail,
         });
 
         if (result.error) {
@@ -220,6 +240,11 @@ export async function POST(req: Request) {
         received_at: direction === "inbound" ? now : null,
         failed_at: failedAt,
         failure_reason: failureReason,
+        metadata: {
+          sender: DEFAULT_FROM_EMAIL,
+          reply_to: replyToEmail,
+          sender_policy: "solacetrade_verified_domain_only",
+        },
       })
       .select("*")
       .single();
