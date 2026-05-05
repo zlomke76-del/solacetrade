@@ -19,7 +19,7 @@ type SignupBody = {
   postalCode?: string;
 };
 
-const DEALER_SELECT = "id, slug, name, billing_email, lead_email, stripe_customer_id";
+const DEALER_SELECT = "id, slug, name, billing_email, lead_email, stripe_customer_id, internal_access_key";
 
 function nullableText(value: unknown, maxLength = 500) {
   const cleaned = cleanText(value, maxLength);
@@ -42,6 +42,10 @@ function parseEmailList(value: unknown) {
     .split(/[,\n;]/)
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+}
+
+function createInternalAccessKey() {
+  return `ST-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
 }
 
 async function createUniqueSlug(dealerName: string) {
@@ -94,6 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     const slug = await createUniqueSlug(dealerName);
+    const internalAccessKey = createInternalAccessKey();
     const appUrl = getAppBaseUrl();
     const monthlyPriceId = getStripeMonthlyPriceId();
     const setupPriceId = getStripeSetupPriceId();
@@ -134,6 +139,7 @@ export async function POST(request: NextRequest) {
         billing_status: "checkout_started",
         stripe_customer_id: customer.id,
         stripe_price_id: monthlyPriceId,
+        internal_access_key: internalAccessKey,
       })
       .select(DEALER_SELECT)
       .single();
