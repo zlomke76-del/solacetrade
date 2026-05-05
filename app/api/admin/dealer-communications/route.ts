@@ -26,7 +26,7 @@ const DEFAULT_FROM_EMAIL =
 const DEFAULT_REPLY_TO_EMAIL =
   process.env.SOLACETRADE_MARKETING_REPLY_TO ||
   process.env.TRADEDESK_MARKETING_REPLY_TO ||
-  "team@solacetrade.ai";
+  "reply@solacetrade.ai";
 
 function splitEmailList(value: string[] | string | null | undefined) {
   if (!value) return [];
@@ -52,19 +52,6 @@ function normalizeRequiredText(value: unknown) {
 function makeError(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
-}
-
-function getReplyToEmail(dealer?: {
-  lead_email?: string | null;
-  crm_email?: string | null;
-  billing_email?: string | null;
-} | null) {
-  return (
-    dealer?.crm_email ||
-    dealer?.lead_email ||
-    dealer?.billing_email ||
-    DEFAULT_REPLY_TO_EMAIL
-  );
 }
 
 async function getDealer(dealerId: string) {
@@ -180,7 +167,7 @@ export async function POST(req: Request) {
 
     const dealer = dealerId ? await getDealer(dealerId) : null;
     const now = new Date().toISOString();
-    const replyToEmail = getReplyToEmail(dealer);
+    const replyToEmail = DEFAULT_REPLY_TO_EMAIL;
 
     let providerMessageId: string | null = null;
     let status: "sent" | "received" | "failed" = direction === "inbound" ? "received" : "sent";
