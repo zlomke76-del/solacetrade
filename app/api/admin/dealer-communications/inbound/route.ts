@@ -268,6 +268,7 @@ export async function POST(req: NextRequest) {
         provider: "resend",
         provider_message_id: providerMessageId,
         received_at: now,
+        created_at: now,
         metadata: {
           event_type: eventType,
           contact_id: contact?.id || null,
