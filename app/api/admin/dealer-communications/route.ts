@@ -98,7 +98,8 @@ export async function GET(req: Request) {
           received_at,
           opened_at,
           failed_at,
-          failure_reason
+          failure_reason,
+          metadata
         `,
       )
       .order("created_at", { ascending: false })
