@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import TradeDesk from "../../../components/TradeDesk";
+import TradeDesk from "@/components/TradeDesk";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   formatDealerPhoneLine,
