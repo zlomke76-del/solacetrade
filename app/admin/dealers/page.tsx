@@ -658,6 +658,16 @@ export default function AdminDealersPage() {
     }
   }
 
+  useEffect(() => {
+    loadCommunications(compose.dealer_id);
+
+    const interval = window.setInterval(() => {
+      loadCommunications(compose.dealer_id);
+    }, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [compose.dealer_id]);
+
   function selectCommunicationDealer(dealerId: string) {
     const dealer = dealers.find((item) => item.id === dealerId);
     const recipients = dealerRecipientOptions(dealer);
@@ -2241,8 +2251,8 @@ Tim`,
                       lineHeight: 1.45,
                     }}
                   >
-                    No emails loaded yet. Select a dealer to filter history, or refresh
-                    the inbox to view recent direct and dealer-bound outreach.
+                    No emails loaded yet. This panel now auto-refreshes every 15 seconds.
+                    Direct replies with no dealer selected will appear here as Direct Outreach.
                   </div>
                 ) : null}
               </div>
