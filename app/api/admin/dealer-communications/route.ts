@@ -138,7 +138,7 @@ function escapeHtml(value: string) {
 }
 
 function formatPlainTextBody(body: string, unsubscribeUrl: string) {
-  return `${body.trim()}\n\n--\nSolaceTrade\nReal offer in seconds. No games.\n\nTo stop receiving SolaceTrade outreach, unsubscribe here:\n${unsubscribeUrl}`;
+  return `${body.trim()}\n\nSee the live demo — no obligation:\nhttps://www.solacetrade.ai\n\nNo signup. No commitment. Just see how it works.\n\n--\nSolaceTrade\nReal offer in seconds. No games.\n\nTo stop receiving SolaceTrade outreach, unsubscribe here:\n${unsubscribeUrl}`;
 }
 
 function paragraphsFromBody(body: string) {
@@ -186,6 +186,12 @@ function buildHtmlBody(input: {
             <tr>
               <td style="padding:24px 22px 10px;">
                 ${htmlParagraphs}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 22px 18px;">
+                <a href="https://www.solacetrade.ai" style="display:inline-block;background:#ea580c;color:#ffffff;font-size:14px;font-weight:900;text-decoration:none;padding:13px 18px;border-radius:12px;">See the live demo — no obligation</a>
+                <div style="font-size:12px;line-height:1.45;color:#64748b;margin-top:8px;">No signup. No commitment. Just see how it works.</div>
               </td>
             </tr>
             <tr>
