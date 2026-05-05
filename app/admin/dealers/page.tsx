@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 type Dealer = {
@@ -58,6 +59,12 @@ type CommunicationMessage = {
   received_at?: string | null;
   opened_at?: string | null;
   marketing_stage?: string | null;
+  provider?: string | null;
+  provider_message_id?: string | null;
+  thread_key?: string | null;
+  contact_email?: string | null;
+  reply_to_message_id?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ComposeForm = {
@@ -333,7 +340,7 @@ function Pill({
   children,
   tone,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tone: "green" | "gray" | "amber" | "blue" | "red";
 }) {
   const styles: Record<typeof tone, CSSProperties> = {
@@ -400,6 +407,52 @@ function MiniField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function normalizeThreadSubject(value: string | null | undefined) {
+  return String(value || "No subject")
+    .replace(/^\s*((re|fw|fwd):\s*)+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase() || "no subject";
+}
+
+function prettyThreadSubject(value: string | null | undefined) {
+  const cleaned = String(value || "No subject")
+    .replace(/^\s*((re|fw|fwd):\s*)+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned || "No subject";
+}
+
+function getMessageContactEmail(message: CommunicationMessage) {
+  if (message.contact_email && message.contact_email.includes("@")) {
+    return message.contact_email.toLowerCase();
+  }
+
+  const candidate =
+    message.direction === "inbound" ? message.from_email : message.to_email;
+
+  return String(candidate || "").toLowerCase();
+}
+
+function getMessageThreadKey(message: CommunicationMessage) {
+  if (message.thread_key) return message.thread_key;
+  return `${getMessageContactEmail(message)}::${normalizeThreadSubject(message.subject)}`;
+}
+
+function messageTimestamp(message: CommunicationMessage) {
+  const value = messageTime(message);
+  if (!value) return 0;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function excerpt(value: string | null | undefined, max = 96) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "No body captured.";
+  return text.length > max ? `${text.slice(0, max).trim()}…` : text;
+}
+
 export default function AdminDealersPage() {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [form, setForm] = useState<DealerForm>(blankForm);
@@ -417,6 +470,9 @@ export default function AdminDealersPage() {
   >("all");
   const [compose, setCompose] = useState<ComposeForm>(blankCompose);
   const [sendingCommunication, setSendingCommunication] = useState(false);
+  const [selectedThreadKey, setSelectedThreadKey] = useState<string | null>(null);
+  const [threadReplyBody, setThreadReplyBody] = useState("");
+  const [replyingThread, setReplyingThread] = useState(false);
 
   const isEditing = Boolean(form.id);
   const routingCcCount = countEmailList(form.routing_cc_emails);
@@ -800,6 +856,171 @@ Tim`,
       );
     } finally {
       setSendingCommunication(false);
+    }
+  }
+
+
+  const communicationThreads = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        key: string;
+        contactEmail: string;
+        subject: string;
+        dealerId: string;
+        dealerName: string;
+        marketingStage: string;
+        messages: CommunicationMessage[];
+        lastMessage: CommunicationMessage;
+        lastTimestamp: number;
+        inboundCount: number;
+        outboundCount: number;
+      }
+    >();
+
+    for (const message of visibleCommunicationMessages) {
+      const key = getMessageThreadKey(message);
+      const current = grouped.get(key);
+      const timestamp = messageTimestamp(message);
+      const contactEmail = getMessageContactEmail(message);
+      const dealerName = message.dealer_name || message.dealer_slug || "Direct Outreach";
+      const dealerId = message.dealer_id || "";
+      const marketingStage = message.marketing_stage || "general";
+
+      if (!current) {
+        grouped.set(key, {
+          key,
+          contactEmail,
+          subject: prettyThreadSubject(message.subject),
+          dealerId,
+          dealerName,
+          marketingStage,
+          messages: [message],
+          lastMessage: message,
+          lastTimestamp: timestamp,
+          inboundCount: message.direction === "inbound" ? 1 : 0,
+          outboundCount: message.direction === "outbound" ? 1 : 0,
+        });
+        continue;
+      }
+
+      current.messages.push(message);
+      if (timestamp >= current.lastTimestamp) {
+        current.lastMessage = message;
+        current.lastTimestamp = timestamp;
+      }
+      if (message.direction === "inbound") current.inboundCount += 1;
+      if (message.direction === "outbound") current.outboundCount += 1;
+      if (!current.dealerId && dealerId) current.dealerId = dealerId;
+      if (current.dealerName === "Direct Outreach" && dealerName !== "Direct Outreach") {
+        current.dealerName = dealerName;
+      }
+    }
+
+    return Array.from(grouped.values())
+      .map((thread) => ({
+        ...thread,
+        messages: [...thread.messages].sort(
+          (a, b) => messageTimestamp(a) - messageTimestamp(b),
+        ),
+      }))
+      .sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+  }, [visibleCommunicationMessages]);
+
+  const selectedThread = useMemo(() => {
+    if (!communicationThreads.length) return null;
+    if (selectedThreadKey) {
+      return (
+        communicationThreads.find((thread) => thread.key === selectedThreadKey) ||
+        communicationThreads[0]
+      );
+    }
+    return communicationThreads[0];
+  }, [communicationThreads, selectedThreadKey]);
+
+  useEffect(() => {
+    if (!communicationThreads.length) {
+      setSelectedThreadKey(null);
+      return;
+    }
+
+    if (!selectedThreadKey || !communicationThreads.some((thread) => thread.key === selectedThreadKey)) {
+      setSelectedThreadKey(communicationThreads[0].key);
+    }
+  }, [communicationThreads, selectedThreadKey]);
+
+  function beginThreadReply(thread = selectedThread) {
+    if (!thread) return;
+
+    setCompose((previous) => ({
+      ...previous,
+      dealer_id: thread.dealerId || previous.dealer_id,
+      to_email: thread.contactEmail,
+      subject: thread.subject.toLowerCase().startsWith("re:")
+        ? thread.subject
+        : `Re: ${thread.subject}`,
+      marketing_stage:
+        thread.marketingStage === "general" ? "follow_up" : thread.marketingStage,
+    }));
+
+    setThreadReplyBody("");
+  }
+
+  async function sendThreadReply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedThread) return;
+
+    setReplyingThread(true);
+    setCommunicationsStatus("");
+
+    try {
+      const body = threadReplyBody.trim();
+
+      if (!body) {
+        throw new Error("Reply message is required.");
+      }
+
+      const response = await fetch("/api/admin/dealer-communications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealer_id: selectedThread.dealerId || null,
+          to_email: selectedThread.contactEmail,
+          cc_emails: "",
+          subject: selectedThread.subject.toLowerCase().startsWith("re:")
+            ? selectedThread.subject
+            : `Re: ${selectedThread.subject}`,
+          body,
+          marketing_stage:
+            selectedThread.marketingStage === "general"
+              ? "follow_up"
+              : selectedThread.marketingStage,
+          direction: "outbound",
+          thread_key: selectedThread.key,
+          reply_to_message_id:
+            selectedThread.messages[selectedThread.messages.length - 1]?.id || null,
+        }),
+      });
+
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(json.error || "Could not send reply.");
+      }
+
+      if (!json.ok && json.error) {
+        throw new Error(json.error);
+      }
+
+      setThreadReplyBody("");
+      setCommunicationsStatus("Reply sent and added to the conversation.");
+      await loadCommunications(compose.dealer_id);
+    } catch (error) {
+      setCommunicationsStatus(
+        error instanceof Error ? error.message : "Could not send reply.",
+      );
+    } finally {
+      setReplyingThread(false);
     }
   }
 
@@ -1836,7 +2057,7 @@ Tim`,
                 Marketing Communication Center
               </div>
               <h2 style={{ margin: 0, fontSize: 22, letterSpacing: "-0.03em" }}>
-                Dealer email workspace
+                SolaceTrade outreach inbox
               </h2>
               <p
                 style={{
@@ -1847,9 +2068,9 @@ Tim`,
                   maxWidth: 760,
                 }}
               >
-                Email-only inbound and outbound history for dealer marketing.
-                Use this to track outreach, follow-ups, pricing conversations,
-                and replies without mixing in SMS or customer trade traffic.
+                Gmail-style threaded outreach for dealer acquisition. Compose direct
+                emails, watch inbound replies arrive automatically, and respond from
+                the same conversation without exposing this system to dealers.
               </p>
             </div>
 
@@ -1886,8 +2107,8 @@ Tim`,
                 }}
               >
                 <SectionHeader
-                  title="Compose marketing email"
-                  note="Choose a dealer, select a known dealer-side recipient, then send and log the message."
+                  title="Compose outbound email"
+                  note="Dealer is optional. Direct outreach is tracked by contact email and threaded automatically when replies arrive."
                 />
 
                 <div className="field-grid">
@@ -2074,12 +2295,12 @@ Tim`,
               >
                 <div>
                   <h3 style={{ margin: 0, fontSize: 16 }}>
-                    Inbound / Outbound
+                    Conversations
                   </h3>
                   <p style={{ margin: "5px 0 0", color: muted, fontSize: 12 }}>
                     {communicationsLoading
                       ? "Loading communication history..."
-                      : `${visibleCommunicationMessages.length} shown · ${inboundCount} inbound · ${outboundCount} outbound`}
+                      : `${communicationThreads.length} threads · ${inboundCount} inbound · ${outboundCount} outbound`}
                   </p>
                 </div>
                 <Pill tone="blue">Email only</Pill>
@@ -2120,141 +2341,354 @@ Tim`,
               </div>
 
               <div
-                className="communication-message-list"
-                style={{ marginTop: 12 }}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(210px, 0.78fr) minmax(0, 1.22fr)",
+                  gap: 12,
+                  marginTop: 12,
+                  minHeight: 560,
+                }}
               >
-                {visibleCommunicationMessages.map((message) => (
-                  <article
-                    key={message.id}
-                    style={{
-                      border: `1px solid ${border}`,
-                      borderRadius: 16,
-                      padding: 12,
-                      background:
-                        message.direction === "inbound" ? "#f8fafc" : "#fff7ed",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <strong
-                          style={{
-                            display: "block",
-                            fontSize: 14,
-                            overflowWrap: "anywhere",
-                          }}
-                        >
-                          {message.subject || "No subject"}
-                        </strong>
-                        <span
-                          style={{
-                            display: "block",
-                            marginTop: 4,
-                            color: muted,
-                            fontSize: 12,
-                            overflowWrap: "anywhere",
-                          }}
-                        >
-                          {message.direction === "inbound" ? "From" : "To"}:{" "}
-                          {message.direction === "inbound"
-                            ? message.from_email
-                            : message.to_email}
-                        </span>
-                        {message.dealer_name || message.dealer_slug ? (
-                          <span
-                            style={{
-                              display: "block",
-                              marginTop: 3,
-                              color: muted,
-                              fontSize: 12,
-                            }}
-                          >
-                            {message.dealer_name || message.dealer_slug}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div
-                        style={{ display: "grid", gap: 6, justifyItems: "end" }}
-                      >
-                        <Pill
-                          tone={
-                            message.direction === "inbound" ? "blue" : "amber"
-                          }
-                        >
-                          {message.direction}
-                        </Pill>
-                        <span
-                          style={{
-                            color: muted,
-                            fontSize: 11,
-                            fontWeight: 800,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {formatDateTime(messageTime(message))}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p
-                      style={{
-                        margin: "10px 0 0",
-                        color: "#334155",
-                        fontSize: 13,
-                        lineHeight: 1.5,
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {message.body || "No body captured."}
-                    </p>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        marginTop: 10,
-                      }}
-                    >
-                      {message.status ? (
-                        <Pill
-                          tone={message.status === "failed" ? "red" : "gray"}
-                        >
-                          {message.status}
-                        </Pill>
-                      ) : null}
-                      {message.marketing_stage ? (
-                        <Pill tone="gray">{message.marketing_stage}</Pill>
-                      ) : null}
-                      {message.opened_at ? (
-                        <Pill tone="green">Opened</Pill>
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
-
-                {!communicationsLoading &&
-                visibleCommunicationMessages.length === 0 ? (
+                <div
+                  style={{
+                    border: `1px solid ${border}`,
+                    borderRadius: 16,
+                    overflow: "hidden",
+                    background: soft,
+                    minWidth: 0,
+                  }}
+                >
                   <div
                     style={{
-                      padding: 18,
-                      borderRadius: 18,
-                      background: soft,
-                      border: `1px solid ${border}`,
-                      color: muted,
-                      fontSize: 14,
-                      lineHeight: 1.45,
+                      padding: "10px 11px",
+                      borderBottom: `1px solid ${border}`,
+                      background: "white",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      alignItems: "center",
                     }}
                   >
-                    No emails loaded yet. This panel now auto-refreshes every 15 seconds.
-                    Direct replies with no dealer selected will appear here as Direct Outreach.
+                    <strong style={{ fontSize: 13 }}>Thread list</strong>
+                    <span style={{ color: muted, fontSize: 11, fontWeight: 800 }}>
+                      {communicationThreads.length}
+                    </span>
                   </div>
-                ) : null}
+
+                  <div style={{ maxHeight: 600, overflow: "auto" }}>
+                    {communicationThreads.map((thread) => {
+                      const selected = selectedThread?.key === thread.key;
+                      return (
+                        <button
+                          key={thread.key}
+                          type="button"
+                          onClick={() => setSelectedThreadKey(thread.key)}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            border: "none",
+                            borderBottom: `1px solid ${border}`,
+                            background: selected ? "#eff6ff" : "white",
+                            padding: 11,
+                            cursor: "pointer",
+                            display: "grid",
+                            gap: 5,
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 8,
+                              alignItems: "baseline",
+                            }}
+                          >
+                            <strong
+                              style={{
+                                fontSize: 13,
+                                color: dark,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {thread.subject}
+                            </strong>
+                            <span style={{ color: muted, fontSize: 10, whiteSpace: "nowrap" }}>
+                              {formatDateTime(messageTime(thread.lastMessage))}
+                            </span>
+                          </span>
+                          <span
+                            style={{
+                              color: muted,
+                              fontSize: 12,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {thread.contactEmail}
+                          </span>
+                          <span style={{ color: "#334155", fontSize: 12, lineHeight: 1.35 }}>
+                            {excerpt(thread.lastMessage.body)}
+                          </span>
+                          <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <Pill tone={thread.inboundCount ? "blue" : "gray"}>
+                              {thread.inboundCount} in
+                            </Pill>
+                            <Pill tone={thread.outboundCount ? "amber" : "gray"}>
+                              {thread.outboundCount} out
+                            </Pill>
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {!communicationsLoading && communicationThreads.length === 0 ? (
+                      <div
+                        style={{
+                          padding: 16,
+                          color: muted,
+                          fontSize: 13,
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        No conversations yet. Send an outreach email or wait for
+                        inbound replies from Resend.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${border}`,
+                    borderRadius: 16,
+                    background: "white",
+                    minWidth: 0,
+                    overflow: "hidden",
+                    display: "grid",
+                    gridTemplateRows: "auto 1fr auto",
+                  }}
+                >
+                  {selectedThread ? (
+                    <>
+                      <div
+                        style={{
+                          padding: 13,
+                          borderBottom: `1px solid ${border}`,
+                          background: "#0f172a",
+                          color: "white",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <h4
+                              style={{
+                                margin: 0,
+                                fontSize: 18,
+                                letterSpacing: "-0.03em",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {selectedThread.subject}
+                            </h4>
+                            <p
+                              style={{
+                                margin: "5px 0 0",
+                                color: "#cbd5e1",
+                                fontSize: 12,
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {selectedThread.contactEmail} · {selectedThread.dealerName}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => beginThreadReply(selectedThread)}
+                            style={{
+                              border: "1px solid rgba(255,255,255,0.22)",
+                              borderRadius: 999,
+                              background: "rgba(255,255,255,0.08)",
+                              color: "white",
+                              padding: "8px 11px",
+                              fontSize: 12,
+                              fontWeight: 900,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Reply
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          padding: 13,
+                          overflow: "auto",
+                          maxHeight: 430,
+                          background: "#f8fafc",
+                          display: "grid",
+                          gap: 12,
+                        }}
+                      >
+                        {selectedThread.messages.map((message) => {
+                          const isOutbound = message.direction === "outbound";
+                          return (
+                            <article
+                              key={message.id}
+                              style={{
+                                justifySelf: isOutbound ? "end" : "start",
+                                maxWidth: "92%",
+                                border: `1px solid ${border}`,
+                                borderRadius: 16,
+                                padding: 12,
+                                background: isOutbound ? "#fff7ed" : "white",
+                                boxShadow: "0 10px 28px rgba(15,23,42,0.06)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  alignItems: "flex-start",
+                                }}
+                              >
+                                <div style={{ minWidth: 0 }}>
+                                  <strong style={{ display: "block", fontSize: 13 }}>
+                                    {isOutbound ? "SolaceTrade" : message.from_email}
+                                  </strong>
+                                  <span
+                                    style={{
+                                      display: "block",
+                                      marginTop: 3,
+                                      color: muted,
+                                      fontSize: 11,
+                                      overflowWrap: "anywhere",
+                                    }}
+                                  >
+                                    {isOutbound
+                                      ? `To: ${message.to_email}`
+                                      : `To: ${message.to_email}`}
+                                  </span>
+                                </div>
+                                <span style={{ color: muted, fontSize: 11, whiteSpace: "nowrap" }}>
+                                  {formatDateTime(messageTime(message))}
+                                </span>
+                              </div>
+
+                              <p
+                                style={{
+                                  margin: "10px 0 0",
+                                  color: "#334155",
+                                  fontSize: 13,
+                                  lineHeight: 1.55,
+                                  whiteSpace: "pre-wrap",
+                                }}
+                              >
+                                {message.body || "No body captured."}
+                              </p>
+
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 7,
+                                  flexWrap: "wrap",
+                                  marginTop: 10,
+                                }}
+                              >
+                                <Pill tone={isOutbound ? "amber" : "blue"}>
+                                  {message.direction}
+                                </Pill>
+                                {message.status ? (
+                                  <Pill tone={message.status === "failed" ? "red" : "gray"}>
+                                    {message.status}
+                                  </Pill>
+                                ) : null}
+                                {message.marketing_stage ? (
+                                  <Pill tone="gray">{message.marketing_stage}</Pill>
+                                ) : null}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+
+                      <form
+                        onSubmit={sendThreadReply}
+                        style={{
+                          padding: 13,
+                          borderTop: `1px solid ${border}`,
+                          background: "white",
+                          display: "grid",
+                          gap: 9,
+                        }}
+                      >
+                        <label style={labelStyle()}>
+                          Reply to {selectedThread.contactEmail}
+                          <textarea
+                            value={threadReplyBody}
+                            onChange={(event) => setThreadReplyBody(event.target.value)}
+                            placeholder="Write a reply in this thread..."
+                            style={{ ...textareaStyle(), minHeight: 92 }}
+                          />
+                        </label>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span style={{ color: muted, fontSize: 12, fontWeight: 700 }}>
+                            Sends from SolaceTrade and logs back into this thread.
+                          </span>
+                          <button
+                            type="submit"
+                            disabled={replyingThread}
+                            style={{
+                              border: "none",
+                              borderRadius: 13,
+                              background: dark,
+                              color: "white",
+                              padding: "10px 13px",
+                              fontSize: 12,
+                              fontWeight: 900,
+                              cursor: replyingThread ? "wait" : "pointer",
+                              opacity: replyingThread ? 0.7 : 1,
+                            }}
+                          >
+                            {replyingThread ? "Sending..." : "Send reply"}
+                          </button>
+                        </div>
+                      </form>
+                    </>
+                  ) : (
+                    <div
+                      style={{
+                        padding: 18,
+                        color: muted,
+                        fontSize: 14,
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Select a thread to read and reply.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
