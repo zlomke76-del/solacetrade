@@ -402,11 +402,6 @@ export async function POST(req: Request) {
     const now = new Date().toISOString();
     const replyToEmail = DEFAULT_REPLY_TO_EMAIL;
     const contactEmail = direction === "outbound" ? toEmail : fromEmail;
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}` ||
-      "https://www.solacetrade.ai";
-    const unsubscribeUrl = `${baseUrl}/api/solacetrade/unsubscribe?email=${encodeURIComponent(contactEmail)}`;
     const threadKey =
       normalizeOptionalText(payload.thread_key) ||
       parentMessage?.thread_key ||
