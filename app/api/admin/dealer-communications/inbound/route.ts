@@ -102,12 +102,14 @@ function getPayloadRoot(raw: AnyObject) {
 }
 
 function getInboundEmailId(raw: AnyObject, root: AnyObject) {
+  // Resend email.received webhooks provide the received-email id at data.email_id.
+  // Keep the other fallbacks for resilience across test payloads and future payload variants.
   return (
     asString(root.email_id) ||
     asString(root.emailId) ||
-    asString(root.id) ||
     asString(raw.email_id) ||
     asString(raw.emailId) ||
+    asString(root.id) ||
     asString(raw.id) ||
     ""
   );
@@ -173,6 +175,85 @@ function getAddresses(raw: AnyObject, root: AnyObject) {
   return { fromEmail, toEmail, ccEmails };
 }
 
+function decodeQuotedPrintable(input: string) {
+  const withoutSoftBreaks = input.replace(/=\r?\n/g, "");
+  return withoutSoftBreaks.replace(/=([A-Fa-f0-9]{2})/g, (_, hex: string) =>
+    String.fromCharCode(parseInt(hex, 16)),
+  );
+}
+
+function decodeMimeText(input: string, encoding: string) {
+  const normalizedEncoding = encoding.toLowerCase();
+
+  if (normalizedEncoding.includes("base64")) {
+    try {
+      return Buffer.from(input.replace(/\s/g, ""), "base64").toString("utf8").trim();
+    } catch {
+      return input.trim();
+    }
+  }
+
+  if (normalizedEncoding.includes("quoted-printable")) {
+    return decodeQuotedPrintable(input).trim();
+  }
+
+  return input.trim();
+}
+
+function getHeaderValue(headerBlock: string, name: string) {
+  const unfolded = headerBlock.replace(/\r?\n[ \t]+/g, " ");
+  const pattern = new RegExp(`^${name}:\\s*(.+)$`, "im");
+  return unfolded.match(pattern)?.[1]?.trim() || "";
+}
+
+function parseRawEmailBody(rawEmail: string) {
+  const normalized = rawEmail.replace(/\r\n/g, "\n");
+  const separatorIndex = normalized.indexOf("\n\n");
+
+  if (separatorIndex < 0) return "";
+
+  const headerBlock = normalized.slice(0, separatorIndex);
+  const bodyBlock = normalized.slice(separatorIndex + 2);
+  const contentType = getHeaderValue(headerBlock, "content-type");
+  const transferEncoding = getHeaderValue(headerBlock, "content-transfer-encoding");
+  const boundary = contentType.match(/boundary="?([^";]+)"?/i)?.[1];
+
+  if (!boundary) {
+    const decoded = decodeMimeText(bodyBlock, transferEncoding);
+    return /text\/html/i.test(contentType) ? stripHtml(decoded) : decoded;
+  }
+
+  const boundaryMarker = `--${boundary}`;
+  const parts = bodyBlock
+    .split(boundaryMarker)
+    .map((part) => part.trim())
+    .filter((part) => part && part !== "--");
+
+  let htmlFallback = "";
+
+  for (const part of parts) {
+    const partSeparator = part.indexOf("\n\n");
+    if (partSeparator < 0) continue;
+
+    const partHeaders = part.slice(0, partSeparator);
+    const partBody = part.slice(partSeparator + 2).replace(/\n--$/, "");
+    const partContentType = getHeaderValue(partHeaders, "content-type");
+    const partDisposition = getHeaderValue(partHeaders, "content-disposition");
+    const partEncoding = getHeaderValue(partHeaders, "content-transfer-encoding");
+
+    if (/attachment/i.test(partDisposition)) continue;
+
+    const decoded = decodeMimeText(partBody, partEncoding);
+
+    if (/text\/plain/i.test(partContentType) && decoded) return decoded;
+    if (/text\/html/i.test(partContentType) && decoded && !htmlFallback) {
+      htmlFallback = stripHtml(decoded);
+    }
+  }
+
+  return htmlFallback;
+}
+
 async function retrieveReceivedEmail(emailId: string) {
   if (!emailId) return null;
 
@@ -202,6 +283,23 @@ async function retrieveReceivedEmail(emailId: string) {
 
   const data = asObject(json.data);
   return Object.keys(data).length ? data : json;
+}
+
+async function retrieveRawEmailBody(retrieved: AnyObject | null) {
+  const raw = asObject(retrieved?.raw);
+  const downloadUrl = asString(raw.download_url);
+
+  if (!downloadUrl) return "";
+
+  const response = await fetch(downloadUrl, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) return "";
+
+  const rawEmail = await response.text();
+  return parseRawEmailBody(rawEmail);
 }
 
 function mergeWebhookWithRetrievedEmail(root: AnyObject, retrieved: AnyObject | null) {
@@ -299,19 +397,52 @@ async function markMatchingMarketingSendsReplied(email: string) {
   return sendIds;
 }
 
+async function findExistingInbound(providerMessageId: string | null, inboundEmailId: string) {
+  const lookupValue = providerMessageId || inboundEmailId;
+  if (!lookupValue) return null;
+
+  const { data, error } = await supabaseAdmin
+    .schema(SOLACETRADE_SCHEMA)
+    .from("dealer_communications")
+    .select("*")
+    .eq("provider", "resend")
+    .eq("provider_message_id", lookupValue)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const raw = (await req.json().catch(() => ({}))) as AnyObject;
     const webhookRoot = getPayloadRoot(raw);
     const eventType = asString(raw.type) || asString(raw.event) || "email.received";
+
+    if (eventType !== "email.received") {
+      return NextResponse.json({ ok: true, ignored: true, eventType });
+    }
+
     const inboundEmailId = getInboundEmailId(raw, webhookRoot);
+
+    if (!inboundEmailId) {
+      return NextResponse.json(
+        {
+          error: "Inbound webhook is missing data.email_id.",
+          eventType,
+        },
+        { status: 400 },
+      );
+    }
+
     const retrievedEmail = await retrieveReceivedEmail(inboundEmailId);
     const root = mergeWebhookWithRetrievedEmail(webhookRoot, retrievedEmail);
 
+    const rawFallbackBody = await retrieveRawEmailBody(retrievedEmail);
     const { fromEmail, toEmail, ccEmails } = getAddresses(raw, root);
     const subject = getSubject(root);
-    const body = getBody(root);
-    const providerMessageId = getProviderMessageId(raw, root);
+    const body = getBody(root) || rawFallbackBody;
+    const providerMessageId = getProviderMessageId(raw, root) || inboundEmailId;
     const now = new Date().toISOString();
 
     if (!fromEmail || !fromEmail.includes("@")) {
@@ -319,6 +450,25 @@ export async function POST(req: NextRequest) {
         { error: "Inbound email is missing a valid from address." },
         { status: 400 },
       );
+    }
+
+    if (!body) {
+      // Return 500 so Resend retries instead of permanently storing an empty inbound email.
+      throw new Error(
+        `Received email ${inboundEmailId} was retrieved, but no text/html/raw body could be parsed.`,
+      );
+    }
+
+    const existingInbound = await findExistingInbound(providerMessageId, inboundEmailId);
+
+    if (existingInbound) {
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+        message: existingInbound,
+        inboundEmailId,
+        bodyCaptured: Boolean(existingInbound.body),
+      });
     }
 
     const contact = await ensureContact(fromEmail);
@@ -338,7 +488,7 @@ export async function POST(req: NextRequest) {
         to_email: toEmail,
         cc_emails: ccEmails,
         subject,
-        body: body || "No body captured.",
+        body,
         marketing_stage: latestOutbound?.marketing_stage || "reply",
         provider: "resend",
         provider_message_id: providerMessageId,
@@ -350,8 +500,14 @@ export async function POST(req: NextRequest) {
           matched_outbound_id: latestOutbound?.id || null,
           replied_marketing_send_ids: repliedSendIds,
           inbound_to: toEmail,
-          inbound_email_id: inboundEmailId || null,
-          body_source: body ? (asString(root.text) ? "received_email_text" : "received_email_html") : "missing",
+          inbound_email_id: inboundEmailId,
+          body_source: getBody(root)
+            ? asString(root.text)
+              ? "received_email_text"
+              : "received_email_html"
+            : "raw_email_download",
+          has_text: Boolean(asString(root.text)),
+          has_html: Boolean(asString(root.html)),
           raw_event_type: eventType,
         },
       })
@@ -367,7 +523,7 @@ export async function POST(req: NextRequest) {
       matchedOutboundId: latestOutbound?.id || null,
       repliedSendIds,
       inboundEmailId,
-      bodyCaptured: Boolean(body),
+      bodyCaptured: true,
     });
   } catch (error) {
     return NextResponse.json(
